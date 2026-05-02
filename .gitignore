@@ -1,0 +1,13 @@
+# Local Claude settings (user-specific permission decisions)
+.claude/settings.local.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor junk
+*.swp
+*~
+
+# Future-proof
+node_modules/
