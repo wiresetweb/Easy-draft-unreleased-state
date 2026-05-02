@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check \"C:/Users/Administrator/Documents/Drafting Software/app.js\")",
+      "Bash(node --check js/state.js)",
+      "Bash(node --check js/palette.js)",
+      "Bash(node --check js/render/appliance.js)",
+      "Bash(node --check js/render.js)",
+      "Bash(node --check js/shapes.js)",
+      "Bash(node --check js/render/cabinet.js)",
+      "Bash(node --check js/render/line.js)"
+    ]
+  }
+}

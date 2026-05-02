@@ -1,0 +1,395 @@
+{
+  "format": "drafting-studio-v1",
+  "savedAt": "2026-05-02T01:12:37.189Z",
+  "stories": [
+    {
+      "id": "Snogz92s",
+      "name": "First Story",
+      "visible": true,
+      "expanded": true,
+      "sublayers": [
+        {
+          "id": "Ls1cdosq",
+          "name": "Floor",
+          "visible": true,
+          "color": "#92400e",
+          "shapes": []
+        },
+        {
+          "id": "Ljncbbru",
+          "name": "Walls",
+          "visible": true,
+          "color": "#1a1a1a",
+          "shapes": [
+            {
+              "id": "X3jvwghi",
+              "type": "line",
+              "x1": 10,
+              "y1": -7.5,
+              "x2": 10,
+              "y2": -7,
+              "thickness": 0.5416666666666666
+            },
+            {
+              "id": "X07d2uoy",
+              "type": "line",
+              "x1": -4.5,
+              "y1": 1.5,
+              "x2": -10,
+              "y2": 1.5,
+              "thickness": 0.375
+            },
+            {
+              "id": "X8x6n3jl",
+              "type": "line",
+              "x1": -10,
+              "y1": -7.5,
+              "x2": -1,
+              "y2": -7.5,
+              "thickness": 0.5416666666666666
+            },
+            {
+              "id": "X62ucu9e",
+              "type": "line",
+              "x1": 5,
+              "y1": -7.5,
+              "x2": 10,
+              "y2": -7.5,
+              "thickness": 0.5416666666666666
+            },
+            {
+              "id": "Xv475ana",
+              "type": "line",
+              "x1": -4.5,
+              "y1": -7.5,
+              "x2": -4.5,
+              "y2": -4.166666666666667,
+              "thickness": 0.375
+            },
+            {
+              "id": "Xl71yb02",
+              "type": "line",
+              "x1": -4.5,
+              "y1": -1.833333333333334,
+              "x2": -4.5,
+              "y2": 1.5,
+              "thickness": 0.375
+            },
+            {
+              "id": "Xknq2mi0",
+              "type": "line",
+              "x1": 10,
+              "y1": 7.5,
+              "x2": -1,
+              "y2": 7.5,
+              "thickness": 0.5416666666666666
+            },
+            {
+              "id": "Xn99qpnf",
+              "type": "line",
+              "x1": -3,
+              "y1": 7.5,
+              "x2": -10,
+              "y2": 7.5,
+              "thickness": 0.5416666666666666
+            },
+            {
+              "id": "X21mkeme",
+              "type": "line",
+              "x1": 10,
+              "y1": -4,
+              "x2": 10,
+              "y2": 2.750000000000001,
+              "thickness": 0.5416666666666666
+            },
+            {
+              "id": "Xv4vp3n0",
+              "type": "line",
+              "x1": 10,
+              "y1": 5.25,
+              "x2": 10,
+              "y2": 7.5,
+              "thickness": 0.5416666666666666
+            },
+            {
+              "id": "Xhu5m24o",
+              "type": "line",
+              "x1": -10,
+              "y1": 7.5,
+              "x2": -10,
+              "y2": -1.5,
+              "thickness": 0.5416666666666666
+            },
+            {
+              "id": "Xmjrixbd",
+              "type": "line",
+              "x1": -10,
+              "y1": -3.5,
+              "x2": -10,
+              "y2": -7.5,
+              "thickness": 0.5416666666666666
+            }
+          ]
+        },
+        {
+          "id": "L2nkc5i5",
+          "name": "Windows & Doors",
+          "visible": true,
+          "color": "#2d4ee0",
+          "shapes": [
+            {
+              "id": "Xlolewff",
+              "type": "door",
+              "x": 10,
+              "y": -7,
+              "width": 3,
+              "angle": 1.5707963267948966,
+              "swing": 1,
+              "subtype": "swing",
+              "kind": "Ext. Door 3'-0\""
+            },
+            {
+              "id": "Xts2t1vq",
+              "type": "door",
+              "x": -1,
+              "y": -7.5,
+              "width": 6,
+              "angle": 0,
+              "swing": 1,
+              "subtype": "sliding",
+              "kind": "Sliding Glass 6'-0\""
+            },
+            {
+              "id": "Xw13vf2m",
+              "type": "door",
+              "x": -4.5,
+              "y": -4.166666666666667,
+              "width": 2.3333333333333335,
+              "angle": 1.5707963267948966,
+              "swing": -1,
+              "subtype": "swing",
+              "kind": "Int. Door 2'-4\""
+            },
+            {
+              "id": "Xolf743o",
+              "type": "window",
+              "x": -1,
+              "y": 7.75,
+              "width": 2,
+              "depth": 0.5,
+              "angle": 3.141592653589793,
+              "kind": "Casement 2'-0\" × 4'-0\""
+            },
+            {
+              "id": "Xoawpyr9",
+              "type": "window",
+              "x": 10.25,
+              "y": 2.75,
+              "width": 2.5,
+              "depth": 0.5,
+              "angle": 1.5707963267948966,
+              "kind": "Casement 2'-6\" × 4'-0\""
+            },
+            {
+              "id": "X4peu0er",
+              "type": "window",
+              "x": -10.25,
+              "y": -1.5,
+              "width": 2,
+              "depth": 0.5,
+              "angle": -1.5707963267948966,
+              "kind": "Single Hung 2'-0\" × 3'-0\""
+            }
+          ]
+        },
+        {
+          "id": "L5avly1r",
+          "name": "Kitchen",
+          "visible": true,
+          "color": "#0d9488",
+          "shapes": [
+            {
+              "id": "Xlvwug8q",
+              "type": "appliance",
+              "x": -9.638355392770157,
+              "y": 4.277663912571487,
+              "width": 2.5,
+              "depth": 2.6666666666666665,
+              "angle": -1.5707963267948966,
+              "kind": "fridge",
+              "label": "Refrigerator 30\""
+            },
+            {
+              "id": "Xocl1dih",
+              "type": "cabinet",
+              "points": [
+                {
+                  "x": 0,
+                  "y": 7.5
+                },
+                {
+                  "x": -10,
+                  "y": 7.5
+                },
+                {
+                  "x": -10,
+                  "y": 4
+                }
+              ],
+              "depth": 2,
+              "side": 1
+            },
+            {
+              "id": "Xwnii3oc",
+              "type": "appliance",
+              "x": -4.25,
+              "y": 7.229166666666667,
+              "width": 2.5,
+              "depth": 1.75,
+              "angle": 3.141592653589793,
+              "kind": "cooktop",
+              "label": "Cooktop 30\""
+            }
+          ]
+        },
+        {
+          "id": "L2he2v7f",
+          "name": "Bathroom",
+          "visible": true,
+          "color": "#0ea5e9",
+          "shapes": [
+            {
+              "id": "Xehnrcgy",
+              "type": "appliance",
+              "x": -9.706001024101589,
+              "y": -7.214093409781203,
+              "width": 5,
+              "depth": 2.5,
+              "angle": 0,
+              "kind": "tub-alcove",
+              "label": "Bathtub 60\" × 30\""
+            },
+            {
+              "id": "Xs4m3qxb",
+              "type": "appliance",
+              "x": -9.729166666666666,
+              "y": -1.2328615326689425,
+              "width": 3,
+              "depth": 1.75,
+              "angle": -1.5707963267948966,
+              "kind": "vanity",
+              "label": "Vanity 36\""
+            },
+            {
+              "id": "X48l1f9h",
+              "type": "appliance",
+              "x": -9.729166666666666,
+              "y": 0.7916666666666667,
+              "width": 1.5833333333333335,
+              "depth": 2.25,
+              "angle": -1.5707963267948966,
+              "kind": "toilet-round",
+              "label": "Toilet (Round Front)"
+            }
+          ]
+        },
+        {
+          "id": "Lud8t1iv",
+          "name": "Furniture",
+          "visible": true,
+          "color": "#7c3aed",
+          "shapes": [
+            {
+              "id": "Xo0m5shr",
+              "type": "appliance",
+              "x": 4.375,
+              "y": -1.583333333333333,
+              "width": 5.25,
+              "depth": 3.1666666666666665,
+              "angle": 0,
+              "kind": "loveseat",
+              "label": "Loveseat 5'-3\""
+            },
+            {
+              "id": "Xxlkmtmx",
+              "type": "appliance",
+              "x": 2.875,
+              "y": -1.625,
+              "width": 1.25,
+              "depth": 1.25,
+              "angle": 0,
+              "kind": "floor-lamp",
+              "label": "Floor Lamp"
+            },
+            {
+              "id": "X0smvbwr",
+              "type": "appliance",
+              "x": 4.5,
+              "y": 5.75,
+              "width": 5,
+              "depth": 1.5,
+              "angle": 0,
+              "kind": "media-console",
+              "label": "Media Console 60\""
+            },
+            {
+              "id": "Xd1ptylf",
+              "type": "appliance",
+              "x": 5,
+              "y": 6.25,
+              "width": 4,
+              "depth": 0.5,
+              "angle": 0,
+              "kind": "tv-stand",
+              "label": "TV 55\" (stand)"
+            }
+          ]
+        },
+        {
+          "id": "La1dyy7x",
+          "name": "Measurements",
+          "visible": true,
+          "color": "#dc2626",
+          "shapes": []
+        }
+      ]
+    }
+  ],
+  "activeSublayerId": "Lud8t1iv",
+  "view": {
+    "zoom": 0.7409847570004787,
+    "pan": {
+      "x": 368.360460067949,
+      "y": 242.55913784776828
+    },
+    "gridSize": 1,
+    "snap": true,
+    "gridOpacity": 0.5
+  },
+  "sheets": [
+    {
+      "id": "SHfq56c51",
+      "name": "Sheet 1",
+      "number": "A-101",
+      "sheetType": "drawing",
+      "paperSize": "ANSI-A",
+      "orientation": "landscape",
+      "pageOrigin": {
+        "x": -22,
+        "y": -17
+      },
+      "pageOutlineVisible": false,
+      "textScale": 1,
+      "titleBlock": {
+        "project": "",
+        "address": "",
+        "title": "First Floor Plan",
+        "date": "5/1/2026",
+        "drawnBy": "",
+        "scale": "1/4\" = 1'-0\""
+      },
+      "notes": []
+    }
+  ],
+  "activeSheetId": "SHfq56c51"
+}

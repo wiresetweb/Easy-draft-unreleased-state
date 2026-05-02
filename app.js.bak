@@ -1,0 +1,5359 @@
+// =============================================================================
+// app.js — Drafting Studio (single-file IIFE, ~5350 lines)
+// =============================================================================
+// File map. Line ranges drift as code changes; widen if needed.
+//
+//    49 –  182  Constants (sizes, colors, door/window catalog, layer defaults)
+//   183 –  227  State (single global `state` object)
+//   228 –  291  DOM lookups
+//   292 –  327  init()
+//   328 –  426  Layers (story / sublayer model)
+//   427 –  561  SVG icons (eye, palette item glyphs)
+//   562 –  641  Layer tree UI
+//   642 –  701  Coordinates + snapping (screen↔world, snap corners, endpoints)
+//   702 –  777  Format / parse feet (e.g.  3'-6")
+//   778 –  850  History (snapshot / restore / undo / redo)
+//   851 –  924  Canvas sizing, zoom, rounded-rect helpers
+//   925 – 1029  Geometry — quadratic Bezier curves, door/window axes
+//  1030 – 1087  Rendering: grid
+//  1088 – 1627  Rendering: per-shape draw helpers (line / arc / door /
+//                                window / text / stairs / appliance)
+//  1628 – 1797  Cabinet rendering (composite shape helpers)
+//  1798 – 2321  Shape registry — central dispatch table for all shape types
+//  2322 – 2640  Render dispatch (drawShape via registry) + previews
+//  2641 – 2705  Selection rendering
+//  2706 – 2725  render() entrypoint
+//  2726 – 2791  Tool selection / cursor
+//  2792 – 2952  Selection helpers (hit-test, bbox via registry)
+//  2953 – 2986  Selection ops (delete, duplicate)
+//  2987 – 3132  Select-tool transforms (move / rotate / resize via registry)
+//  3133 – 3208  Select-tool pointer handling
+//  3209 – 3252  Contextual curve drag
+//  3253 – 3642  Palette panel (doors / windows / kitchen catalog)
+//  3643 – 3753  Dimension modal (resize via keyboard input)
+//  3754 – 3808  Line stroke modal
+//  3809 – 3973  Text modal + inline placement editor
+//  3974 – 4161  Wall-cut helpers (door/window dropped on wall line)
+//  4162 – 4239  Box tool collinear-overlap merge
+//  4240 – 4606  Stairs geometry (flights, landings)
+//  4607 – 4672  Cabinet builder preview
+//  4673 – 4754  Stairs modal
+//  4755 – 4885  Cabinet builder (multi-click placement)
+//  4886 – 4959  Color popup
+//  4960 – 5354  Events + init() invocation
+// =============================================================================
+
+(() => {
+  "use strict";
+
+  // ---------- Constants ----------
+  const PX_PER_FOOT = 20;
+  const MAX_HISTORY = 100;
+
+  const MEASURE_COLOR = "#dc2626";
+  const MEASURE_BORDER_SOFT = "rgba(220, 38, 38, 0.5)";
+
+  const SELECT_COLOR = "#2d4ee0";
+  const SELECT_FILL_SOFT = "rgba(45, 78, 224, 0.08)";
+  const SELECT_LINE_SOFT = "rgba(45, 78, 224, 0.85)";
+  const SELECT_GLOW = "rgba(45, 78, 224, 0.32)";
+
+  const CURVE_PREVIEW_COLOR = "rgba(45, 78, 224, 0.85)";
+  const HOVER_GLOW = "rgba(45, 78, 224, 0.28)";
+
+  const HANDLE_HIT = 7;
+  const SHAPE_HIT = 6;
+  const ROT_INNER = 9;
+  const ROT_OUTER = 22;
+
+  const WINDOW_DOOR_LAYER_NAME = "Windows & Doors";
+  const KITCHEN_LAYER_NAME = "Kitchen";
+  const DEFAULT_WINDOW_DEPTH_FT = 0.5; // 6" wall thickness
+  const SHAPE_COLOR = "#0f1322";
+
+  // 12-color palette for layers
+  const LAYER_COLOR_PALETTE = [
+    "#1a1a1a", "#4a5568", "#92400e", "#dc2626",
+    "#f59e0b", "#84cc16", "#15803d", "#0d9488",
+    "#0ea5e9", "#2d4ee0", "#7c3aed", "#db2777",
+  ];
+
+  const DEFAULT_LAYER_COLORS = {
+    "Foundation":      "#4a5568",
+    "Floor":           "#92400e",
+    "Walls":           "#1a1a1a",
+    "Windows & Doors": "#2d4ee0",
+    "Kitchen":         "#0d9488",
+    "Electrical":      "#dc2626",
+    "Plumbing":        "#0ea5e9",
+    "HVAC":            "#f59e0b",
+    "Other":           "#4a5568",
+    "Measurements":    "#dc2626",
+  };
+
+  const DEFAULT_LAYER_COLOR_FALLBACK = "#1a1a1a";
+
+  const DEFAULT_TEXT_FONT_FAMILY = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  const DEFAULT_TEXT_SIZE_FT = 0.5; // 6"
+  const WALL_LAYER_NAME = "Walls";
+  const WALL_CUT_TOL_FT = 0.25;
+
+  // Stairs defaults
+  const DEFAULT_STAIRS_CEILING_FT = 8;
+  const DEFAULT_STAIRS_RISE_FT = 7 / 12;  // 7"
+  const DEFAULT_STAIRS_RUN_FT = 11 / 12;  // 11"
+  const DEFAULT_STAIRS_WIDTH_FT = 3;
+
+  // Cabinet builder defaults
+  const DEFAULT_CABINET_DEPTH_FT = 2; // 24" — standard base cabinet
+
+  const ORDINALS = [
+    "First", "Second", "Third", "Fourth", "Fifth",
+    "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"
+  ];
+  const DEFAULT_SUBLAYERS_FIRST = [
+    "Floor", "Walls", "Windows & Doors", "Kitchen", "Other", "Measurements"
+  ];
+  const DEFAULT_SUBLAYERS_OTHER = [
+    "Floor", "Walls", "Windows & Doors", "Other", "Measurements"
+  ];
+
+  const MEASUREMENTS_LAYER_NAME = "Measurements";
+
+  // Standard residential doors / windows (US, plan-view symbol)
+  const PALETTE_ITEMS = {
+    doors: [
+      { name: 'Ext. Door 2\'-8"',     subtype: "swing",   width: 2 + 8 / 12 },
+      { name: 'Ext. Door 3\'-0"',     subtype: "swing",   width: 3 },
+      { name: 'Ext. Door 3\'-6"',     subtype: "swing",   width: 3.5 },
+      { name: 'Sliding Glass 6\'-0"', subtype: "sliding", width: 6 },
+      { name: 'Sliding Glass 8\'-0"', subtype: "sliding", width: 8 },
+      { name: 'Int. Door 2\'-0"',     subtype: "swing",   width: 2 },
+      { name: 'Int. Door 2\'-4"',     subtype: "swing",   width: 2 + 4 / 12 },
+      { name: 'Int. Door 2\'-6"',     subtype: "swing",   width: 2.5 },
+      { name: 'Int. Door 2\'-8"',     subtype: "swing",   width: 2 + 8 / 12 },
+      { name: 'Int. Door 3\'-0"',     subtype: "swing",   width: 3 },
+      { name: 'French Doors 5\'-0"',  subtype: "double",  width: 5 },
+      { name: 'French Doors 6\'-0"',  subtype: "double",  width: 6 },
+      { name: 'Pocket Door 2\'-6"',   subtype: "pocket",  width: 2.5 },
+      { name: 'Pocket Door 2\'-8"',   subtype: "pocket",  width: 2 + 8 / 12 },
+      { name: 'Pocket Door 3\'-0"',   subtype: "pocket",  width: 3 },
+      { name: 'Garage Door 9\'-0"',   subtype: "garage",  width: 9 },
+      { name: 'Garage Door 10\'-0"',  subtype: "garage",  width: 10 },
+      { name: 'Garage Door 16\'-0"',  subtype: "garage",  width: 16 },
+      { name: 'Garage Door 18\'-0"',  subtype: "garage",  width: 18 },
+    ],
+    windows: [
+      { name: 'Single Hung 2\'-0" × 3\'-0"', width: 2 },
+      { name: 'Single Hung 2\'-6" × 3\'-6"', width: 2.5 },
+      { name: 'Single Hung 3\'-0" × 4\'-0"', width: 3 },
+      { name: 'Double Hung 3\'-0" × 5\'-0"', width: 3 },
+      { name: 'Casement 2\'-0" × 4\'-0"',     width: 2 },
+      { name: 'Casement 2\'-6" × 4\'-0"',     width: 2.5 },
+      { name: 'Awning 3\'-0" × 1\'-6"',       width: 3 },
+      { name: 'Awning 4\'-0" × 2\'-0"',       width: 4 },
+      { name: 'Sliding 4\'-0" × 3\'-0"',      width: 4 },
+      { name: 'Sliding 6\'-0" × 4\'-0"',      width: 6 },
+      { name: 'Picture 4\'-0" × 4\'-0"',      width: 4 },
+      { name: 'Picture 6\'-0" × 5\'-0"',      width: 6 },
+    ],
+    // Kitchen appliances — width is along the wall, depth is into the room.
+    // Standard residential dimensions (US) for plan-view symbols.
+    kitchen: [
+      { name: 'Range 30"',          kind: "range",       width: 2.5,        depth: 2 + 1 / 12 },
+      { name: 'Range 36"',          kind: "range",       width: 3,          depth: 2 + 1 / 12 },
+      { name: 'Cooktop 30"',        kind: "cooktop",     width: 2.5,        depth: 1 + 9 / 12 },
+      { name: 'Cooktop 36"',        kind: "cooktop",     width: 3,          depth: 1 + 9 / 12 },
+      { name: 'Wall Oven 30"',      kind: "oven",        width: 2.5,        depth: 2 },
+      { name: 'Refrigerator 30"',   kind: "fridge",      width: 2.5,        depth: 2 + 8 / 12 },
+      { name: 'Refrigerator 36"',   kind: "fridge",      width: 3,          depth: 2 + 8 / 12 },
+      { name: 'Refrigerator 48"',   kind: "fridge",      width: 4,          depth: 2 + 8 / 12 },
+      { name: 'Dishwasher 24"',     kind: "dishwasher",  width: 2,          depth: 2 },
+      { name: 'Sink 24"',           kind: "sink",        width: 2,          depth: 1 + 9 / 12 },
+      { name: 'Sink 30"',           kind: "sink",        width: 2.5,        depth: 1 + 9 / 12 },
+      { name: 'Double Sink 33"',    kind: "sink-double", width: 2 + 9 / 12, depth: 1 + 9 / 12 },
+      { name: 'Microwave 24"',      kind: "microwave",   width: 2,          depth: 1 + 4 / 12 },
+      { name: 'Base Cabinet 24"',   kind: "cabinet",     width: 2,          depth: 2 },
+      { name: 'Base Cabinet 30"',   kind: "cabinet",     width: 2.5,        depth: 2 },
+      { name: 'Base Cabinet 36"',   kind: "cabinet",     width: 3,          depth: 2 },
+      { name: 'Island 4\'-0" × 6\'-0"', kind: "island",  width: 6,          depth: 4 },
+    ],
+  };
+
+  // ---------- State ----------
+  const state = {
+    zoom: 1,
+    pan: { x: 0, y: 0 },
+
+    gridSize: 1,
+    snap: true,
+    gridOpacity: 0.5,
+
+    stories: [],
+    activeSublayerId: null,
+
+    tool: "line",
+    pending: null,
+    cursorWorld: { x: 0, y: 0 },
+    cursorScreen: { x: 0, y: 0 },
+
+    panning: false,
+    panStart: null,
+    panOrigin: null,
+    spaceDown: false,
+    shiftDown: false,
+
+    history: [],
+    future: [],
+
+    selection: new Set(),
+    selectionMode: null,
+    selectionData: null,
+    marquee: null,
+
+    curveDrag: null, // { shapeId, originalShape, historyPushed }
+
+    placing: null, // { def, sectionKey }
+    paletteExpanded: { doors: true, windows: true, kitchen: true },
+
+    colorPopup: null, // { subId } when open
+
+    textPending: null, // { x, y } world coords while creating text
+
+    stairsDirection: null, // { start: {x,y}, angle? } during arrow placement
+
+    cabinetBuilder: null, // { points: [{x,y}], depth, side, layerId, storyId } while building
+  };
+
+  // ---------- DOM ----------
+  const canvas = document.getElementById("board");
+  const ctx = canvas.getContext("2d");
+  const wrap = document.querySelector(".canvas-wrap");
+
+  const zoomInBtn = document.getElementById("zoom-in");
+  const zoomOutBtn = document.getElementById("zoom-out");
+  const zoomResetBtn = document.getElementById("zoom-reset");
+  const zoomReadout = document.getElementById("zoom-readout");
+
+  const gridSizeInput = document.getElementById("grid-size");
+  const snapToggle = document.getElementById("snap-toggle");
+  const gridOpacityInput = document.getElementById("grid-opacity");
+
+  const toolListEl = document.getElementById("tool-list");
+  const undoBtn = document.getElementById("undo-btn");
+  const redoBtn = document.getElementById("redo-btn");
+  const clearBtn = document.getElementById("clear-btn");
+
+  const layerTreeEl = document.getElementById("layer-tree");
+  const addStoryBtn = document.getElementById("add-story-btn");
+
+  const statusPos = document.getElementById("status-pos");
+  const statusTool = document.getElementById("status-tool");
+  const statusActive = document.getElementById("status-active-layer");
+
+  const palettePanel = document.getElementById("palette-panel");
+  const paletteHeader = document.getElementById("palette-header");
+  const paletteBody = document.getElementById("palette-body");
+  const paletteMin = document.getElementById("palette-min");
+  const paletteResize = document.getElementById("palette-resize");
+
+  const layersPanel = document.getElementById("layers-panel");
+  const layersHeader = document.getElementById("layers-header");
+  const layersMin = document.getElementById("layers-min");
+  const layersResize = document.getElementById("layers-resize");
+
+  const dimModal = document.getElementById("dim-modal");
+  const dimWidthInput = document.getElementById("dim-width");
+  const doorFlipRow = document.getElementById("door-flip-row");
+
+  const colorPopupEl = document.getElementById("color-popup");
+
+  const lineModalEl = document.getElementById("line-modal");
+  const textModalEl = document.getElementById("text-modal");
+  const textContentInput = document.getElementById("text-content");
+  const textFontSelect = document.getElementById("text-font");
+  const textSizeInput = document.getElementById("text-size");
+  const textOutlineSelect = document.getElementById("text-outline");
+  const textInlineEditor = document.getElementById("text-inline-editor");
+
+  const stairsModal = document.getElementById("stairs-modal");
+  const stairsCeilingInput = document.getElementById("stairs-ceiling");
+  const stairsRiseInput = document.getElementById("stairs-rise");
+  const stairsRunInput = document.getElementById("stairs-run");
+  const stairsWidthInput = document.getElementById("stairs-width");
+  const stairsCancelBtn = document.getElementById("stairs-cancel");
+  const stairsBuildBtn = document.getElementById("stairs-build");
+
+  const cabinetModal = document.getElementById("cabinet-modal");
+  const cabinetDepthInput = document.getElementById("cabinet-depth");
+  const cabinetCancelBtn = document.getElementById("cabinet-cancel");
+  const cabinetFinishBtn = document.getElementById("cabinet-finish");
+
+  // ---------- Init ----------
+  function init() {
+    addStory();
+    bindEvents();
+    fitCanvas();
+    centerView();
+    renderLayerTree();
+    renderPalette();
+    bindPalettePanel();
+    bindLayersPanel();
+    bindDimModal();
+    bindLineModal();
+    bindTextModal();
+    bindTextInlineEditor();
+    bindStairsModal();
+    bindCabinetModal();
+    bindColorPopup();
+    updatePaletteVisibility();
+    render();
+  }
+
+  function withAlpha(color, alpha) {
+    if (typeof color !== "string") return color;
+    if (color.startsWith("#") && color.length === 7) {
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    return color;
+  }
+
+  function makeId(prefix) {
+    return prefix + Math.random().toString(36).slice(2, 9);
+  }
+
+  // ---------- Layers ----------
+  function addStory() {
+    const isFirst = state.stories.length === 0;
+    const idx = state.stories.length;
+    const ordinal = ORDINALS[idx] || `Story ${idx + 1}`;
+    const subNames = isFirst ? DEFAULT_SUBLAYERS_FIRST : DEFAULT_SUBLAYERS_OTHER;
+    const sublayers = subNames.map((n) => ({
+      id: makeId("L"),
+      name: n,
+      visible: true,
+      shapes: [],
+      color: DEFAULT_LAYER_COLORS[n] || DEFAULT_LAYER_COLOR_FALLBACK,
+    }));
+    state.stories.push({
+      id: makeId("S"),
+      name: `${ordinal} Story`,
+      visible: true,
+      expanded: true,
+      sublayers,
+    });
+    if (!state.activeSublayerId) {
+      // Prefer Walls as the default working layer — that's what users typically
+      // start with. Fall back to the first sublayer if Walls is missing.
+      const walls = sublayers.find((l) => l.name === WALL_LAYER_NAME);
+      state.activeSublayerId = (walls || sublayers[0]).id;
+    }
+  }
+
+  function addSublayer(storyId, name) {
+    const story = state.stories.find((s) => s.id === storyId);
+    if (!story) return;
+    const sub = {
+      id: makeId("L"),
+      name,
+      visible: true,
+      shapes: [],
+      color: DEFAULT_LAYER_COLORS[name] || DEFAULT_LAYER_COLOR_FALLBACK,
+    };
+    story.sublayers.push(sub);
+    state.activeSublayerId = sub.id;
+  }
+
+  function activeSublayer() {
+    for (const s of state.stories) {
+      const sub = s.sublayers.find((l) => l.id === state.activeSublayerId);
+      if (sub) return sub;
+    }
+    return null;
+  }
+
+  // Returns the active story's Measurements sub-layer, creating it if missing.
+  function getMeasurementsLayer() {
+    const story = activeStory();
+    if (!story) return null;
+    let layer = story.sublayers.find((l) => l.name === MEASUREMENTS_LAYER_NAME);
+    if (!layer) {
+      layer = {
+        id: makeId("L"),
+        name: MEASUREMENTS_LAYER_NAME,
+        visible: true,
+        shapes: [],
+        color: DEFAULT_LAYER_COLORS[MEASUREMENTS_LAYER_NAME] || DEFAULT_LAYER_COLOR_FALLBACK,
+      };
+      story.sublayers.push(layer);
+    }
+    return layer;
+  }
+
+  function activeStory() {
+    for (const s of state.stories) {
+      if (s.sublayers.find((l) => l.id === state.activeSublayerId)) return s;
+    }
+    return null;
+  }
+
+  function forEachVisibleShape(cb) {
+    for (const story of state.stories) {
+      if (!story.visible) continue;
+      for (const sub of story.sublayers) {
+        if (!sub.visible) continue;
+        for (const sh of sub.shapes) cb(sh, sub, story);
+      }
+    }
+  }
+
+  function forEachShape(cb) {
+    for (const story of state.stories) {
+      for (const sub of story.sublayers) {
+        for (const sh of sub.shapes) cb(sh, sub, story);
+      }
+    }
+  }
+
+  function findShapeById(id) {
+    let found = null;
+    forEachShape((sh) => { if (sh.id === id) found = sh; });
+    return found;
+  }
+
+  // ---------- SVG icons ----------
+  function eyeSvg() {
+    return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  }
+  function eyeOffSvg() {
+    return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 0 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  }
+  function plusSvg() {
+    return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  }
+  function caretSvg() {
+    return '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  }
+
+  // SVG previews for palette items
+  function paletteIconSvg(item) {
+    const stroke = `stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+    if (item.subtype === "sliding") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <path d="M2 8 H 46 M 2 18 H 46" stroke-width="0.9"/>
+        <path d="M5 11 H 25" stroke-width="2"/>
+        <path d="M23 15 H 43" stroke-width="2"/>
+      </svg>`;
+    }
+    if (item.subtype === "double") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <path d="M2 22 H 8" stroke-width="2"/>
+        <path d="M40 22 H 46" stroke-width="2"/>
+        <path d="M8 22 V 8" stroke-width="1.5"/>
+        <path d="M40 22 V 8" stroke-width="1.5"/>
+        <path d="M24 22 A 16 16 0 0 0 8 8" stroke-width="0.9" stroke-dasharray="2 2"/>
+        <path d="M24 22 A 16 16 0 0 1 40 8" stroke-width="0.9" stroke-dasharray="2 2"/>
+      </svg>`;
+    }
+    if (item.subtype === "pocket") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <path d="M2 22 H 6" stroke-width="2"/>
+        <path d="M42 22 H 46" stroke-width="2"/>
+        <path d="M6 22 V 14" stroke-width="1.5"/>
+        <path d="M42 22 V 14" stroke-width="1.5"/>
+        <path d="M9 18 H 42" stroke-width="2"/>
+        <path d="M13 14 L 9 18 L 13 22" stroke-width="1.2"/>
+      </svg>`;
+    }
+    if (item.subtype === "garage") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <path d="M2 22 H 5" stroke-width="2"/>
+        <path d="M43 22 H 46" stroke-width="2"/>
+        <path d="M5 22 V 14" stroke-width="1.5"/>
+        <path d="M43 22 V 14" stroke-width="1.5"/>
+        <path d="M5 18 H 43" stroke-width="1.2"/>
+        <path d="M14 16 V 20 M 24 16 V 20 M 34 16 V 20" stroke-width="0.7"/>
+      </svg>`;
+    }
+    if (item.kind === "range" || item.kind === "cooktop") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="6" y="3" width="36" height="20" stroke-width="1.5"/>
+        <circle cx="16" cy="10" r="3" stroke-width="1"/>
+        <circle cx="32" cy="10" r="3" stroke-width="1"/>
+        <circle cx="16" cy="18" r="2" stroke-width="1"/>
+        <circle cx="32" cy="18" r="2" stroke-width="1"/>
+      </svg>`;
+    }
+    if (item.kind === "oven") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="6" y="3" width="36" height="20" stroke-width="1.5"/>
+        <line x1="10" y1="8" x2="38" y2="8" stroke-width="1"/>
+        <rect x="14" y="11" width="20" height="9" stroke-width="0.9"/>
+      </svg>`;
+    }
+    if (item.kind === "fridge") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="6" y="3" width="36" height="20" stroke-width="1.5"/>
+        <line x1="6" y1="10" x2="42" y2="10" stroke-width="1"/>
+        <circle cx="38" cy="7" r="0.8" fill="currentColor"/>
+        <circle cx="38" cy="17" r="0.8" fill="currentColor"/>
+      </svg>`;
+    }
+    if (item.kind === "dishwasher") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="6" y="3" width="36" height="20" stroke-width="1.5"/>
+        <rect x="10" y="7" width="28" height="12" stroke-width="0.9"/>
+        <line x1="14" y1="13" x2="34" y2="13" stroke-width="0.7" stroke-dasharray="2 1"/>
+      </svg>`;
+    }
+    if (item.kind === "sink") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="6" y="3" width="36" height="20" stroke-width="1.5"/>
+        <rect x="11" y="7" width="26" height="12" stroke-width="1"/>
+        <circle cx="24" cy="13" r="1.5" stroke-width="0.9"/>
+      </svg>`;
+    }
+    if (item.kind === "sink-double") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="4" y="3" width="40" height="20" stroke-width="1.5"/>
+        <rect x="8" y="7" width="15" height="12" stroke-width="1"/>
+        <rect x="25" y="7" width="15" height="12" stroke-width="1"/>
+      </svg>`;
+    }
+    if (item.kind === "microwave") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="6" y="6" width="36" height="14" stroke-width="1.5"/>
+        <rect x="9" y="9" width="24" height="8" stroke-width="0.9"/>
+        <line x1="36" y1="9" x2="36" y2="17" stroke-width="0.7"/>
+      </svg>`;
+    }
+    if (item.kind === "cabinet") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="6" y="3" width="36" height="20" stroke-width="1.5"/>
+        <line x1="6" y1="3" x2="42" y2="23" stroke-width="0.8"/>
+        <line x1="42" y1="3" x2="6" y2="23" stroke-width="0.8"/>
+      </svg>`;
+    }
+    if (item.kind === "island") {
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="3" y="6" width="42" height="14" stroke-width="1.8"/>
+        <line x1="3" y1="13" x2="45" y2="13" stroke-width="0.7" stroke-dasharray="2 2"/>
+      </svg>`;
+    }
+    if (!item.subtype) {
+      // window
+      return `<svg viewBox="0 0 48 26" ${stroke}>
+        <rect x="3" y="9" width="42" height="10" stroke-width="1.5"/>
+        <line x1="3" y1="14" x2="45" y2="14" stroke-width="0.8"/>
+      </svg>`;
+    }
+    // swing
+    return `<svg viewBox="0 0 48 26" ${stroke}>
+      <path d="M2 22 H 10" stroke-width="2"/>
+      <path d="M38 22 H 46" stroke-width="2"/>
+      <path d="M10 22 V 4" stroke-width="1.5"/>
+      <path d="M38 22 A 28 28 0 0 0 10 4" stroke-width="0.9" stroke-dasharray="2 2"/>
+    </svg>`;
+  }
+
+  // ---------- Layer tree UI ----------
+  function renderLayerTree() {
+    layerTreeEl.innerHTML = "";
+    for (const story of state.stories) {
+      const storyEl = document.createElement("div");
+      storyEl.className = "story" + (story.expanded ? "" : " collapsed");
+      storyEl.dataset.storyId = story.id;
+
+      const header = document.createElement("div");
+      header.className = "story-header";
+
+      const expandBtn = document.createElement("button");
+      expandBtn.className = "icon-btn expand-btn";
+      expandBtn.dataset.action = "expand";
+      expandBtn.title = "Toggle expand";
+      expandBtn.innerHTML = caretSvg();
+      header.appendChild(expandBtn);
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "story-name";
+      nameEl.textContent = story.name;
+      header.appendChild(nameEl);
+
+      const visBtn = document.createElement("button");
+      visBtn.className = "icon-btn vis-btn" + (story.visible ? "" : " muted");
+      visBtn.dataset.action = "vis-story";
+      visBtn.title = story.visible ? "Hide story" : "Show story";
+      visBtn.innerHTML = story.visible ? eyeSvg() : eyeOffSvg();
+      header.appendChild(visBtn);
+
+      const addBtn = document.createElement("button");
+      addBtn.className = "icon-btn";
+      addBtn.dataset.action = "add-sub";
+      addBtn.title = "Add sub-layer";
+      addBtn.innerHTML = plusSvg();
+      header.appendChild(addBtn);
+
+      storyEl.appendChild(header);
+
+      const subList = document.createElement("div");
+      subList.className = "sub-list";
+      for (const sub of story.sublayers) {
+        const row = document.createElement("div");
+        row.className = "sub-row" + (sub.id === state.activeSublayerId ? " active" : "");
+        row.dataset.subId = sub.id;
+
+        const colorBtn = document.createElement("button");
+        colorBtn.className = "color-bubble";
+        colorBtn.dataset.action = "color-sub";
+        colorBtn.title = "Layer color";
+        colorBtn.style.background = sub.color || DEFAULT_LAYER_COLOR_FALLBACK;
+        row.appendChild(colorBtn);
+
+        const subName = document.createElement("span");
+        subName.className = "sub-name";
+        subName.textContent = sub.name;
+        row.appendChild(subName);
+
+        const subVis = document.createElement("button");
+        subVis.className = "icon-btn vis-btn" + (sub.visible ? "" : " muted");
+        subVis.dataset.action = "vis-sub";
+        subVis.title = sub.visible ? "Hide layer" : "Show layer";
+        subVis.innerHTML = sub.visible ? eyeSvg() : eyeOffSvg();
+        row.appendChild(subVis);
+
+        subList.appendChild(row);
+      }
+      storyEl.appendChild(subList);
+      layerTreeEl.appendChild(storyEl);
+    }
+    updateStatusActive();
+    updatePaletteVisibility();
+  }
+
+  function updateStatusActive() {
+    const sub = activeSublayer();
+    const story = activeStory();
+    statusActive.textContent = sub && story ? `${story.name} / ${sub.name}` : "—";
+  }
+
+  // ---------- Coordinates ----------
+  function effectiveScale() { return PX_PER_FOOT * state.zoom; }
+  function screenToWorld(sx, sy) {
+    const s = effectiveScale();
+    return { x: (sx - state.pan.x) / s, y: (sy - state.pan.y) / s };
+  }
+  function worldToScreen(wx, wy) {
+    const s = effectiveScale();
+    return { x: wx * s + state.pan.x, y: wy * s + state.pan.y };
+  }
+  function snapWorld(p) {
+    if (!state.snap) return p;
+    const g = state.gridSize;
+    return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
+  }
+  // Doors/windows snap to half-grid so users can land them in the middle of a
+  // wall section without flipping the global grid resolution.
+  function snapWorldHalf(p) {
+    if (!state.snap) return p;
+    const g = state.gridSize / 2;
+    return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
+  }
+  function snapDelta(dx, dy) {
+    if (!state.snap) return { dx, dy };
+    const g = state.gridSize;
+    return { dx: Math.round(dx / g) * g, dy: Math.round(dy / g) * g };
+  }
+
+  // Returns world-space corners of any shape that has a meaningful "footprint"
+  // for snapping purposes — every place a tape measure could reasonably anchor.
+  function shapeSnapCorners(sh) {
+    return SHAPES[sh.type]?.snapCorners?.(sh) ?? [];
+  }
+
+  // Nearest snap-worthy corner of any visible shape, with tolerance in screen
+  // pixels so the magnet feels consistent across zoom. Returns {x, y} in world
+  // units or null.
+  function findNearestEndpoint(worldPos) {
+    const scale = effectiveScale();
+    const tolPx = 12;
+    const tolWorld = tolPx / scale;
+    let best = null;
+    forEachVisibleShape((sh) => {
+      for (const c of shapeSnapCorners(sh)) {
+        const d = Math.hypot(worldPos.x - c.x, worldPos.y - c.y);
+        if (d > tolWorld) continue;
+        if (!best || d < best.d) best = { d, x: c.x, y: c.y };
+      }
+    });
+    return best ? { x: best.x, y: best.y } : null;
+  }
+
+  // For the measure tool: prefer endpoint snap over grid snap so users can
+  // measure precisely between a wall and the edge of an opening.
+  function snapMeasurePoint(worldPos) {
+    const ep = findNearestEndpoint(worldPos);
+    if (ep) return ep;
+    return snapWorld(worldPos);
+  }
+
+  // ---------- Format / parse feet ----------
+  function formatFeet(ft) {
+    const sign = ft < 0 ? "-" : "";
+    const abs = Math.abs(ft);
+    const totalQuarters = Math.round(abs * 48);
+    const inches = totalQuarters / 4;
+    const wholeFt = Math.trunc(inches / 12);
+    const remIn = inches - wholeFt * 12;
+    const wholeIn = Math.trunc(remIn);
+    const frac = Math.min(3, Math.max(0, Math.round((remIn - wholeIn) * 4)));
+    const fractionStr = ["", "¼", "½", "¾"][frac];
+
+    if (wholeFt === 0 && wholeIn === 0 && frac === 0) return '0"';
+    let result = "";
+    if (wholeFt !== 0) result += `${wholeFt}'`;
+    if (wholeIn !== 0 || frac !== 0) {
+      if (wholeFt !== 0) result += "-";
+      if (wholeIn !== 0) result += `${wholeIn}`;
+      if (frac !== 0) {
+        if (wholeIn !== 0) result += " ";
+        result += fractionStr;
+      }
+      result += '"';
+    }
+    return sign + result;
+  }
+
+  // Accepts: 3 | 3.5 | 3' | 3 ft | 3'-6" | 3' 6" | 3'-6 1/2" | 36" | 36 in | 1/2"
+  function parseFeet(str) {
+    if (typeof str !== "string") return null;
+    let s = str.trim();
+    if (!s) return null;
+    s = s.replace(/[¼½¾]/g, (m) => ({ "¼": " 1/4", "½": " 1/2", "¾": " 3/4" }[m]));
+
+    let feet = 0;
+    let inches = 0;
+    let foundFt = false;
+    let foundIn = false;
+
+    let m = s.match(/(-?\d+(?:\.\d+)?)\s*(?:'|ft\b|feet\b)/i);
+    if (m) {
+      feet = parseFloat(m[1]);
+      foundFt = true;
+      s = (s.slice(0, m.index) + s.slice(m.index + m[0].length)).replace(/^[\s\-,–]+/, "").trim();
+    }
+
+    m = s.match(/(-?\d+(?:\.\d+)?)\s+(\d+)\s*\/\s*(\d+)\s*(?:"|in\b|inch(?:es)?\b)?/i);
+    if (m) {
+      inches = parseFloat(m[1]) + parseInt(m[2]) / parseInt(m[3]);
+      foundIn = true;
+      s = (s.slice(0, m.index) + s.slice(m.index + m[0].length)).trim();
+    } else {
+      m = s.match(/(-?\d+(?:\.\d+)?)\s*(?:"|in\b|inch(?:es)?\b)/i);
+      if (m) {
+        inches = parseFloat(m[1]);
+        foundIn = true;
+        s = (s.slice(0, m.index) + s.slice(m.index + m[0].length)).trim();
+      } else {
+        m = s.match(/(\d+)\s*\/\s*(\d+)\s*(?:"|in\b)/i);
+        if (m) {
+          inches = parseInt(m[1]) / parseInt(m[2]);
+          foundIn = true;
+          s = (s.slice(0, m.index) + s.slice(m.index + m[0].length)).trim();
+        }
+      }
+    }
+
+    if (!foundFt && !foundIn) {
+      m = s.trim().match(/^-?\d+(?:\.\d+)?$/);
+      if (m) { feet = parseFloat(m[0]); foundFt = true; }
+    }
+
+    if (!foundFt && !foundIn) return null;
+    return feet + inches / 12;
+  }
+
+  // ---------- History ----------
+  function cloneShape(sh) {
+    const c = { ...sh };
+    SHAPES[sh.type]?.cloneExtra?.(c, sh);
+    return c;
+  }
+
+  function snapshot() {
+    return {
+      stories: state.stories.map((s) => ({
+        id: s.id, name: s.name, visible: s.visible, expanded: s.expanded,
+        sublayers: s.sublayers.map((l) => ({
+          id: l.id, name: l.name, visible: l.visible, color: l.color,
+          shapes: l.shapes.map(cloneShape),
+        })),
+      })),
+      activeSublayerId: state.activeSublayerId,
+    };
+  }
+
+  function pushHistory() {
+    state.history.push(snapshot());
+    if (state.history.length > MAX_HISTORY) state.history.shift();
+    state.future.length = 0;
+  }
+
+  function restore(snap) {
+    state.stories = snap.stories.map((s) => ({
+      id: s.id, name: s.name, visible: s.visible, expanded: s.expanded,
+      sublayers: s.sublayers.map((l) => ({
+        id: l.id, name: l.name, visible: l.visible, color: l.color,
+        shapes: l.shapes.map(cloneShape),
+      })),
+    }));
+    state.activeSublayerId = snap.activeSublayerId;
+    if (!activeSublayer()) {
+      const firstStory = state.stories[0];
+      const walls = firstStory?.sublayers.find((l) => l.name === WALL_LAYER_NAME);
+      state.activeSublayerId = (walls || firstStory?.sublayers[0])?.id ?? null;
+    }
+    pruneSelection();
+    state.curveDrag = null;
+    state.placing = null;
+    state.stairsDirection = null;
+    state.textPending = null;
+    state.cabinetBuilder = null;
+    if (stairsModal && !stairsModal.classList.contains("hidden")) hideStairsModal();
+    if (cabinetModal) detachCabinetModalFromPalette();
+    renderLayerTree();
+  }
+
+  function pruneSelection() {
+    const existing = new Set();
+    forEachShape((sh) => existing.add(sh.id));
+    for (const id of [...state.selection]) {
+      if (!existing.has(id)) state.selection.delete(id);
+    }
+  }
+
+  function undo() {
+    if (!state.history.length) return;
+    state.future.push(snapshot());
+    restore(state.history.pop());
+    render();
+  }
+
+  function redo() {
+    if (!state.future.length) return;
+    state.history.push(snapshot());
+    restore(state.future.pop());
+    render();
+  }
+
+  // ---------- Canvas sizing ----------
+  function fitCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    canvas.style.width = rect.width + "px";
+    canvas.style.height = rect.height + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function viewSize() {
+    const rect = wrap.getBoundingClientRect();
+    return { w: rect.width, h: rect.height };
+  }
+
+  function centerView() {
+    const { w, h } = viewSize();
+    state.pan.x = w / 2;
+    state.pan.y = h / 2;
+  }
+
+  // ---------- Zoom ----------
+  function setZoom(newZoom, anchorScreen) {
+    const z = Math.min(20, Math.max(0.1, newZoom));
+    if (anchorScreen) {
+      const before = screenToWorld(anchorScreen.x, anchorScreen.y);
+      state.zoom = z;
+      const after = worldToScreen(before.x, before.y);
+      state.pan.x += anchorScreen.x - after.x;
+      state.pan.y += anchorScreen.y - after.y;
+    } else {
+      const { w, h } = viewSize();
+      const center = { x: w / 2, y: h / 2 };
+      const before = screenToWorld(center.x, center.y);
+      state.zoom = z;
+      const after = worldToScreen(before.x, before.y);
+      state.pan.x += center.x - after.x;
+      state.pan.y += center.y - after.y;
+    }
+    zoomReadout.textContent = Math.round(state.zoom * 100) + "%";
+    render();
+  }
+
+  // ---------- Render helpers ----------
+  function fillRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  function strokeRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  // ---------- Curve geometry (quadratic Bezier) ----------
+  // The curve passes through (x1,y1) at t=0, (mx,my) at t=0.5, and (x2,y2) at t=1.
+  // The Bezier control point Q is derived so that B(0.5) = (mx, my):
+  //   B(0.5) = 0.25*P1 + 0.5*Q + 0.25*P2 = M  =>  Q = 2M - 0.5(P1 + P2)
+  function bezierControl(sh) {
+    return {
+      x: 2 * sh.mx - 0.5 * (sh.x1 + sh.x2),
+      y: 2 * sh.my - 0.5 * (sh.y1 + sh.y2),
+    };
+  }
+
+  function sampleArcPoints(sh, segmentsHint) {
+    const ax = sh.x1, ay = sh.y1;
+    const bx = sh.x2, by = sh.y2;
+    const mxv = sh.mx, myv = sh.my;
+
+    const cross = (mxv - ax) * (by - ay) - (myv - ay) * (bx - ax);
+    if (Math.abs(cross) < 1e-9) {
+      return [{ x: ax, y: ay }, { x: bx, y: by }];
+    }
+
+    const Q = bezierControl(sh);
+    const segs = segmentsHint || 32;
+    const pts = new Array(segs + 1);
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const u = 1 - t;
+      pts[i] = {
+        x: u * u * ax + 2 * u * t * Q.x + t * t * bx,
+        y: u * u * ay + 2 * u * t * Q.y + t * t * by,
+      };
+    }
+    return pts;
+  }
+
+  // Bbox extrema of a quadratic Bezier — analytic, exact.
+  function arcBBoxPoints(sh) {
+    const ax = sh.x1, ay = sh.y1;
+    const bx = sh.x2, by = sh.y2;
+    const Q = bezierControl(sh);
+    const xs = [ax, bx];
+    const ys = [ay, by];
+
+    const denomX = ax - 2 * Q.x + bx;
+    if (Math.abs(denomX) > 1e-9) {
+      const tx = (ax - Q.x) / denomX;
+      if (tx > 0 && tx < 1) {
+        const u = 1 - tx;
+        xs.push(u * u * ax + 2 * u * tx * Q.x + tx * tx * bx);
+      }
+    }
+    const denomY = ay - 2 * Q.y + by;
+    if (Math.abs(denomY) > 1e-9) {
+      const ty = (ay - Q.y) / denomY;
+      if (ty > 0 && ty < 1) {
+        const u = 1 - ty;
+        ys.push(u * u * ay + 2 * u * ty * Q.y + ty * ty * by);
+      }
+    }
+    return { xs, ys };
+  }
+
+  function pointToSegmentDist(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+  }
+
+  function pointToArcDist(px, py, sh) {
+    const samples = sampleArcPoints(sh, 32);
+    let minD = Infinity;
+    for (let i = 0; i < samples.length - 1; i++) {
+      const d = pointToSegmentDist(
+        px, py,
+        samples[i].x, samples[i].y,
+        samples[i + 1].x, samples[i + 1].y
+      );
+      if (d < minD) minD = d;
+    }
+    return minD;
+  }
+
+  function pointToRectDist(px, py, x1, y1, x2, y2) {
+    const cx = Math.max(x1, Math.min(px, x2));
+    const cy = Math.max(y1, Math.min(py, y2));
+    return Math.hypot(px - cx, py - cy);
+  }
+
+  // ---------- Door / window geometry ----------
+  function doorAxes(sh) {
+    const u = { x: Math.cos(sh.angle), y: Math.sin(sh.angle) };
+    const sgn = sh.swing >= 0 ? 1 : -1;
+    const n = { x: -u.y * sgn, y: u.x * sgn };
+    return { u, n };
+  }
+
+  function windowAxes(sh) {
+    const u = { x: Math.cos(sh.angle), y: Math.sin(sh.angle) };
+    const n = { x: -u.y, y: u.x };
+    return { u, n };
+  }
+
+  // ---------- Rendering: grid ----------
+  function drawGrid() {
+    const { w, h } = viewSize();
+    const scale = effectiveScale();
+    const g = state.gridSize * scale;
+    if (g < 4) return;
+    const op = state.gridOpacity;
+    if (op <= 0) return;
+
+    const topLeft = screenToWorld(0, 0);
+    const bottomRight = screenToWorld(w, h);
+
+    ctx.save();
+
+    ctx.strokeStyle = `rgba(107, 143, 214, ${0.35 * op})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const startX = Math.floor(topLeft.x / state.gridSize) * state.gridSize;
+    const startY = Math.floor(topLeft.y / state.gridSize) * state.gridSize;
+    for (let x = startX; x <= bottomRight.x; x += state.gridSize) {
+      const sx = Math.round(worldToScreen(x, 0).x) + 0.5;
+      ctx.moveTo(sx, 0); ctx.lineTo(sx, h);
+    }
+    for (let y = startY; y <= bottomRight.y; y += state.gridSize) {
+      const sy = Math.round(worldToScreen(0, y).y) + 0.5;
+      ctx.moveTo(0, sy); ctx.lineTo(w, sy);
+    }
+    ctx.stroke();
+
+    const major = state.gridSize * 5;
+    const startMX = Math.floor(topLeft.x / major) * major;
+    const startMY = Math.floor(topLeft.y / major) * major;
+    ctx.strokeStyle = `rgba(74, 115, 197, ${0.6 * op})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = startMX; x <= bottomRight.x; x += major) {
+      const sx = Math.round(worldToScreen(x, 0).x) + 0.5;
+      ctx.moveTo(sx, 0); ctx.lineTo(sx, h);
+    }
+    for (let y = startMY; y <= bottomRight.y; y += major) {
+      const sy = Math.round(worldToScreen(0, y).y) + 0.5;
+      ctx.moveTo(0, sy); ctx.lineTo(w, sy);
+    }
+    ctx.stroke();
+
+    const origin = worldToScreen(0, 0);
+    ctx.strokeStyle = `rgba(45, 78, 224, ${0.35 * op})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, Math.round(origin.y) + 0.5);
+    ctx.lineTo(w, Math.round(origin.y) + 0.5);
+    ctx.moveTo(Math.round(origin.x) + 0.5, 0);
+    ctx.lineTo(Math.round(origin.x) + 0.5, h);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // ---------- Rendering: shapes ----------
+  function drawLineShape(sh, color) {
+    ctx.save();
+    ctx.strokeStyle = color || SHAPE_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = sh.stroke === "dotted" ? "round" : "round";
+    ctx.lineJoin = "round";
+    if (sh.stroke === "dashed") ctx.setLineDash([8, 5]);
+    else if (sh.stroke === "dotted") ctx.setLineDash([0.1, 5]);
+    const a = worldToScreen(sh.x1, sh.y1);
+    const b = worldToScreen(sh.x2, sh.y2);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function pathFromSamples(pts) {
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const sp = worldToScreen(pts[i].x, pts[i].y);
+      if (i === 0) ctx.moveTo(sp.x, sp.y);
+      else ctx.lineTo(sp.x, sp.y);
+    }
+  }
+
+  function drawArcShape(sh, color) {
+    ctx.save();
+    ctx.strokeStyle = color || SHAPE_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    if (sh.stroke === "dashed") ctx.setLineDash([8, 5]);
+    else if (sh.stroke === "dotted") ctx.setLineDash([0.1, 5]);
+
+    const cross = (sh.mx - sh.x1) * (sh.y2 - sh.y1) - (sh.my - sh.y1) * (sh.x2 - sh.x1);
+    const a = worldToScreen(sh.x1, sh.y1);
+    const b = worldToScreen(sh.x2, sh.y2);
+    ctx.beginPath();
+    if (Math.abs(cross) < 1e-9 || sh.mx === undefined) {
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    } else {
+      const Q = bezierControl(sh);
+      const q = worldToScreen(Q.x, Q.y);
+      ctx.moveTo(a.x, a.y);
+      ctx.quadraticCurveTo(q.x, q.y, b.x, b.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawArcSegment(cx, cy, r, a1, a2) {
+    let delta = a2 - a1;
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    const segs = 24;
+    ctx.beginPath();
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const a = a1 + delta * t;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+  }
+
+  function drawDoorShape(sh, color) {
+    const { u, n } = doorAxes(sh);
+    const scale = effectiveScale();
+    const w = sh.width * scale;
+    const H = worldToScreen(sh.x, sh.y);
+    const E = { x: H.x + u.x * w, y: H.y + u.y * w };
+
+    ctx.save();
+    ctx.strokeStyle = color || SHAPE_COLOR;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (sh.subtype === "sliding") {
+      const trackHalf = 0.25 * scale;
+      const t1 = { x: H.x - n.x * trackHalf, y: H.y - n.y * trackHalf };
+      const t2 = { x: H.x + n.x * trackHalf, y: H.y + n.y * trackHalf };
+      const e1 = { x: t1.x + u.x * w, y: t1.y + u.y * w };
+      const e2 = { x: t2.x + u.x * w, y: t2.y + u.y * w };
+
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(t1.x, t1.y); ctx.lineTo(e1.x, e1.y);
+      ctx.moveTo(t2.x, t2.y); ctx.lineTo(e2.x, e2.y);
+      ctx.stroke();
+
+      const halfW = w / 2;
+      const overlap = halfW * 0.06;
+      const off = trackHalf * 0.6;
+
+      const lp1 = { x: H.x - n.x * off, y: H.y - n.y * off };
+      const lp2 = { x: lp1.x + u.x * (halfW + overlap), y: lp1.y + u.y * (halfW + overlap) };
+      const rp1 = {
+        x: H.x + u.x * (halfW - overlap) + n.x * off,
+        y: H.y + u.y * (halfW - overlap) + n.y * off,
+      };
+      const rp2 = { x: rp1.x + u.x * (halfW + overlap), y: rp1.y + u.y * (halfW + overlap) };
+
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(lp1.x, lp1.y); ctx.lineTo(lp2.x, lp2.y);
+      ctx.moveTo(rp1.x, rp1.y); ctx.lineTo(rp2.x, rp2.y);
+      ctx.stroke();
+
+    } else if (sh.subtype === "garage") {
+      const tick = 4;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(H.x - n.x * tick, H.y - n.y * tick);
+      ctx.lineTo(H.x + n.x * tick, H.y + n.y * tick);
+      ctx.moveTo(E.x - n.x * tick, E.y - n.y * tick);
+      ctx.lineTo(E.x + n.x * tick, E.y + n.y * tick);
+      ctx.stroke();
+
+      const off = 0.18 * scale;
+      const p1 = { x: H.x + n.x * off, y: H.y + n.y * off };
+      const p2 = { x: E.x + n.x * off, y: E.y + n.y * off };
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+
+      const numSections = Math.max(2, Math.round(sh.width / 2));
+      const tickLen = 4;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (let i = 1; i < numSections; i++) {
+        const t = i / numSections;
+        const cx = H.x + u.x * w * t + n.x * off;
+        const cy = H.y + u.y * w * t + n.y * off;
+        ctx.moveTo(cx - n.x * tickLen, cy - n.y * tickLen);
+        ctx.lineTo(cx + n.x * tickLen, cy + n.y * tickLen);
+      }
+      ctx.stroke();
+
+    } else if (sh.subtype === "pocket") {
+      const tick = 4;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(H.x - n.x * tick, H.y - n.y * tick);
+      ctx.lineTo(H.x + n.x * tick, H.y + n.y * tick);
+      ctx.moveTo(E.x - n.x * tick, E.y - n.y * tick);
+      ctx.lineTo(E.x + n.x * tick, E.y + n.y * tick);
+      ctx.stroke();
+
+      // Door panel — thin line offset perpendicular to wall
+      const panelOff = 0.12 * scale;
+      const ps = { x: H.x + n.x * panelOff, y: H.y + n.y * panelOff };
+      const pe = { x: E.x + n.x * panelOff, y: E.y + n.y * panelOff };
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(ps.x, ps.y);
+      ctx.lineTo(pe.x, pe.y);
+      ctx.stroke();
+
+      // Chevron arrow at H end pointing into the wall (in -u direction)
+      const arrowLen = 6;
+      const aTip = { x: H.x - u.x * arrowLen, y: H.y - u.y * arrowLen };
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(H.x + n.x * arrowLen * 0.6, H.y + n.y * arrowLen * 0.6);
+      ctx.lineTo(aTip.x, aTip.y);
+      ctx.lineTo(H.x - n.x * arrowLen * 0.6, H.y - n.y * arrowLen * 0.6);
+      ctx.stroke();
+
+    } else if (sh.subtype === "double") {
+      const halfW = w / 2;
+      const M = { x: H.x + u.x * halfW, y: H.y + u.y * halfW };
+      const Tl = { x: H.x + n.x * halfW, y: H.y + n.y * halfW };
+      const Tr = { x: E.x + n.x * halfW, y: E.y + n.y * halfW };
+      const tick = 4;
+
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(H.x - n.x * tick, H.y - n.y * tick);
+      ctx.lineTo(H.x + n.x * tick, H.y + n.y * tick);
+      ctx.moveTo(E.x - n.x * tick, E.y - n.y * tick);
+      ctx.lineTo(E.x + n.x * tick, E.y + n.y * tick);
+      ctx.stroke();
+
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(H.x, H.y); ctx.lineTo(Tl.x, Tl.y);
+      ctx.moveTo(E.x, E.y); ctx.lineTo(Tr.x, Tr.y);
+      ctx.stroke();
+
+      ctx.lineWidth = 0.9;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      drawArcSegment(H.x, H.y, halfW,
+        Math.atan2(M.y - H.y, M.x - H.x),
+        Math.atan2(Tl.y - H.y, Tl.x - H.x));
+      ctx.stroke();
+      ctx.beginPath();
+      drawArcSegment(E.x, E.y, halfW,
+        Math.atan2(M.y - E.y, M.x - E.x),
+        Math.atan2(Tr.y - E.y, Tr.x - E.x));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+    } else {
+      // swing (default)
+      const T = { x: H.x + n.x * w, y: H.y + n.y * w };
+      const tick = 4;
+
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(H.x - n.x * tick, H.y - n.y * tick);
+      ctx.lineTo(H.x + n.x * tick, H.y + n.y * tick);
+      ctx.moveTo(E.x - n.x * tick, E.y - n.y * tick);
+      ctx.lineTo(E.x + n.x * tick, E.y + n.y * tick);
+      ctx.stroke();
+
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(H.x, H.y); ctx.lineTo(T.x, T.y);
+      ctx.stroke();
+
+      ctx.lineWidth = 0.9;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      drawArcSegment(H.x, H.y, w,
+        Math.atan2(E.y - H.y, E.x - H.x),
+        Math.atan2(T.y - H.y, T.x - H.x));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+  }
+
+  function drawWindowShape(sh, color) {
+    const { u, n } = windowAxes(sh);
+    const scale = effectiveScale();
+    const w = sh.width * scale;
+    const d = (sh.depth || DEFAULT_WINDOW_DEPTH_FT) * scale;
+    const H = worldToScreen(sh.x, sh.y);
+
+    const p1 = H;
+    const p2 = { x: H.x + u.x * w, y: H.y + u.y * w };
+    const p3 = { x: p2.x + n.x * d, y: p2.y + n.y * d };
+    const p4 = { x: H.x + n.x * d, y: H.y + n.y * d };
+
+    const m1 = { x: H.x + n.x * d / 2, y: H.y + n.y * d / 2 };
+    const m2 = { x: m1.x + u.x * w, y: m1.y + u.y * w };
+
+    ctx.save();
+    ctx.strokeStyle = color || SHAPE_COLOR;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.lineTo(p4.x, p4.y);
+    ctx.closePath();
+    ctx.stroke();
+
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(m1.x, m1.y);
+    ctx.lineTo(m2.x, m2.y);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Filled triangle arrowhead with the tip at (tipX, tipY) and the body extending
+  // along (dirX, dirY) — the unit vector pointing from tip toward base.
+  function drawArrowhead(tipX, tipY, dirX, dirY) {
+    const len = 9;
+    const halfW = 3;
+    const baseX = tipX + dirX * len;
+    const baseY = tipY + dirY * len;
+    const px = -dirY, py = dirX;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(baseX + px * halfW, baseY + py * halfW);
+    ctx.lineTo(baseX - px * halfW, baseY - py * halfW);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawMeasureShape(sh, color) {
+    const c = color || MEASURE_COLOR;
+    drawDimension(
+      worldToScreen(sh.x1, sh.y1),
+      worldToScreen(sh.x2, sh.y2),
+      Math.hypot(sh.x2 - sh.x1, sh.y2 - sh.y1),
+      (sh.offset || 0) * effectiveScale(),
+      c,
+      1.0,
+    );
+  }
+
+  // Architectural-style dimension drawing. A and B are screen coords of the points
+  // being measured, lenFt is the distance label, offsetPx is the signed perpendicular
+  // distance (in screen px) from the measured line to the dimension line, alpha is
+  // an opacity multiplier (used for the live preview).
+  function drawDimension(A, B, lenFt, offsetPx, color, alpha) {
+    const dx = B.x - A.x;
+    const dy = B.y - A.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) return;
+    const ux = dx / len, uy = dy / len;
+    const nx = -uy, ny = ux;
+
+    const Ap = { x: A.x + nx * offsetPx, y: A.y + ny * offsetPx };
+    const Bp = { x: B.x + nx * offsetPx, y: B.y + ny * offsetPx };
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineCap = "round";
+
+    // Witness (extension) lines from a small gap off the measured points to a
+    // small overshoot past the dimension line.
+    if (Math.abs(offsetPx) > 0.5) {
+      const sgn = offsetPx >= 0 ? 1 : -1;
+      const gap = 2;
+      const overshoot = 4;
+      const startD = sgn * gap;
+      const endD = offsetPx + sgn * overshoot;
+
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(A.x + nx * startD, A.y + ny * startD);
+      ctx.lineTo(A.x + nx * endD, A.y + ny * endD);
+      ctx.moveTo(B.x + nx * startD, B.y + ny * startD);
+      ctx.lineTo(B.x + nx * endD, B.y + ny * endD);
+      ctx.stroke();
+    }
+
+    // Dimension line — leave a small gap at each end so the arrowheads aren't
+    // butted into the line tip (cleaner look).
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(Ap.x, Ap.y);
+    ctx.lineTo(Bp.x, Bp.y);
+    ctx.stroke();
+
+    // Arrowheads pointing inward at each end of the dimension line.
+    drawArrowhead(Ap.x, Ap.y, ux, uy);
+    drawArrowhead(Bp.x, Bp.y, -ux, -uy);
+
+    // Upright label rotated parallel to the dimension line.
+    const text = formatFeet(lenFt);
+    let textAngle = Math.atan2(dy, dx);
+    if (textAngle > Math.PI / 2 || textAngle < -Math.PI / 2) textAngle += Math.PI;
+
+    const cx = (Ap.x + Bp.x) / 2;
+    const cy = (Ap.y + Bp.y) / 2;
+    ctx.translate(cx, cy);
+    ctx.rotate(textAngle);
+
+    ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif";
+    const m = ctx.measureText(text);
+    const padX = 6;
+    const w = m.width + padX * 2;
+    const h = 18;
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+    fillRoundedRect(-w / 2, -h / 2, w, h, 4);
+    ctx.strokeStyle = withAlpha(color, 0.5);
+    ctx.lineWidth = 1;
+    strokeRoundedRect(-w / 2, -h / 2, w, h, 4);
+
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 0, 0);
+
+    ctx.restore();
+  }
+
+  function drawTextShape(sh, color) {
+    const c = color || SHAPE_COLOR;
+    const sizePx = Math.max(2, sh.fontSize * effectiveScale());
+    const pos = worldToScreen(sh.x, sh.y);
+    const angle = sh.angle || 0;
+
+    ctx.save();
+    ctx.font = `${sizePx}px ${sh.fontFamily}`;
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+
+    if (angle) {
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(angle);
+      ctx.translate(-pos.x, -pos.y);
+    }
+
+    const m = ctx.measureText(sh.text);
+    const w = m.width;
+    const h = sizePx * 1.15;
+    const padX = sizePx * 0.3;
+    const padY = sizePx * 0.18;
+
+    if (sh.outline === "box") {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pos.x - padX, pos.y - padY, w + padX * 2, h + padY * 2);
+    } else if (sh.outline === "bubble") {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = 1;
+      strokeRoundedRect(pos.x - padX, pos.y - padY, w + padX * 2, h + padY * 2, sizePx * 0.45);
+    }
+
+    ctx.fillStyle = c;
+    ctx.fillText(sh.text, pos.x, pos.y);
+    ctx.restore();
+  }
+
+  // Returns the four world-space corners of an axis-aligned-then-rotated appliance
+  // (anchor at sh.x, sh.y, width along u, depth along n).
+  function applianceCorners(sh) {
+    const u = { x: Math.cos(sh.angle || 0), y: Math.sin(sh.angle || 0) };
+    const n = { x: -u.y, y: u.x };
+    const w = sh.width, d = sh.depth;
+    return [
+      { x: sh.x,                         y: sh.y                         }, // p1: anchor
+      { x: sh.x + u.x * w,               y: sh.y + u.y * w               }, // p2: along u
+      { x: sh.x + u.x * w + n.x * d,     y: sh.y + u.y * w + n.y * d     }, // p3
+      { x: sh.x + n.x * d,               y: sh.y + n.y * d               }, // p4: along n
+    ];
+  }
+
+  function drawApplianceShape(sh, color) {
+    const c = color || SHAPE_COLOR;
+    const corners = applianceCorners(sh).map((p) => worldToScreen(p.x, p.y));
+    const u = { x: Math.cos(sh.angle || 0), y: Math.sin(sh.angle || 0) };
+    const scale = effectiveScale();
+
+    ctx.save();
+    ctx.strokeStyle = c;
+    ctx.fillStyle = c;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 1.5;
+
+    // Outline
+    ctx.beginPath();
+    ctx.moveTo(corners[0].x, corners[0].y);
+    ctx.lineTo(corners[1].x, corners[1].y);
+    ctx.lineTo(corners[2].x, corners[2].y);
+    ctx.lineTo(corners[3].x, corners[3].y);
+    ctx.closePath();
+    ctx.stroke();
+
+    const cx = (corners[0].x + corners[2].x) / 2;
+    const cy = (corners[0].y + corners[2].y) / 2;
+    const wPx = sh.width * scale;
+    const dPx = sh.depth * scale;
+
+    ctx.translate(cx, cy);
+    ctx.rotate(sh.angle || 0);
+
+    if (sh.kind === "range" || sh.kind === "cooktop") {
+      const r = Math.min(wPx, dPx) * 0.13;
+      const offX = wPx * 0.22, offY = dPx * 0.22;
+      ctx.lineWidth = 1;
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        ctx.beginPath();
+        ctx.arc(sx * offX, sy * offY, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (sh.kind === "oven") {
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-wPx * 0.35, -dPx * 0.3, wPx * 0.7, dPx * 0.6);
+      ctx.beginPath();
+      ctx.moveTo(-wPx * 0.35, -dPx * 0.4);
+      ctx.lineTo(wPx * 0.35, -dPx * 0.4);
+      ctx.stroke();
+    } else if (sh.kind === "fridge") {
+      // Door swing line at front (along +u from anchor side, but visualized as a
+      // perpendicular line representing the door split).
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-wPx / 2, dPx * 0.35);
+      ctx.lineTo(wPx / 2, dPx * 0.35);
+      ctx.stroke();
+    } else if (sh.kind === "dishwasher") {
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-wPx * 0.42, -dPx * 0.38, wPx * 0.84, dPx * 0.76);
+      ctx.font = `${Math.min(wPx, dPx) * 0.28}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = c;
+      ctx.fillText("DW", 0, 0);
+    } else if (sh.kind === "sink") {
+      ctx.lineWidth = 1;
+      const bw = wPx * 0.78, bd = dPx * 0.7;
+      strokeRoundedRect(-bw / 2, -bd / 2, bw, bd, Math.min(bw, bd) * 0.08);
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.min(bw, bd) * 0.07, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (sh.kind === "sink-double") {
+      ctx.lineWidth = 1;
+      const bw = wPx * 0.42, bd = dPx * 0.7;
+      const gap = wPx * 0.04;
+      strokeRoundedRect(-bw - gap / 2, -bd / 2, bw, bd, bw * 0.1);
+      strokeRoundedRect(gap / 2, -bd / 2, bw, bd, bw * 0.1);
+    } else if (sh.kind === "microwave") {
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-wPx * 0.4, -dPx * 0.35, wPx * 0.65, dPx * 0.7);
+      ctx.beginPath();
+      ctx.moveTo(wPx * 0.3, -dPx * 0.35);
+      ctx.lineTo(wPx * 0.3, dPx * 0.35);
+      ctx.stroke();
+    } else if (sh.kind === "cabinet") {
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(-wPx / 2, -dPx / 2);
+      ctx.lineTo(wPx / 2, dPx / 2);
+      ctx.moveTo(wPx / 2, -dPx / 2);
+      ctx.lineTo(-wPx / 2, dPx / 2);
+      ctx.stroke();
+    } else if (sh.kind === "island") {
+      ctx.font = `${Math.min(wPx, dPx) * 0.18}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = c;
+      ctx.fillText("Island", 0, 0);
+    }
+
+    ctx.restore();
+  }
+
+  // ---------- Cabinet rendering ----------
+  // Compute the offset polyline for a cabinet path. Each interior node uses the
+  // intersection of adjacent offset lines so corners miter cleanly.
+  function offsetPolyline(points, depth, side) {
+    const n = points.length;
+    if (n < 2) return [];
+    const segs = [];
+    for (let i = 0; i < n - 1; i++) {
+      const dx = points[i + 1].x - points[i].x;
+      const dy = points[i + 1].y - points[i].y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-9) continue;
+      const ux = dx / len, uy = dy / len;
+      segs.push({ ux, uy, nx: -uy * side, ny: ux * side });
+    }
+    if (segs.length === 0) return [];
+
+    const out = [];
+    out.push({
+      x: points[0].x + segs[0].nx * depth,
+      y: points[0].y + segs[0].ny * depth,
+    });
+    for (let i = 1; i < n - 1; i++) {
+      const s1 = segs[i - 1] || segs[0];
+      const s2 = segs[i] || segs[segs.length - 1];
+      const a1 = { x: points[i].x + s1.nx * depth, y: points[i].y + s1.ny * depth };
+      const a2 = { x: points[i].x + s2.nx * depth, y: points[i].y + s2.ny * depth };
+      const cross = s1.ux * s2.uy - s1.uy * s2.ux;
+      if (Math.abs(cross) < 1e-9) {
+        out.push(a1);
+      } else {
+        const t = ((a2.x - a1.x) * s2.uy - (a2.y - a1.y) * s2.ux) / cross;
+        out.push({ x: a1.x + t * s1.ux, y: a1.y + t * s1.uy });
+      }
+    }
+    const last = segs[segs.length - 1];
+    out.push({
+      x: points[n - 1].x + last.nx * depth,
+      y: points[n - 1].y + last.ny * depth,
+    });
+    return out;
+  }
+
+  // Each cabinet segment is potentially split by overlapping appliances. This
+  // returns the visible parametric sub-ranges along [0, 1] for one segment.
+  function cabinetSegmentVisibleRanges(p1, p2, depth, side, applianceCuts) {
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-9) return [];
+    const ux = dx / len, uy = dy / len;
+    const nx = -uy * side, ny = ux * side;
+
+    const cuts = []; // [{t1, t2}] in [0,1]
+    for (const corners of applianceCuts) {
+      // Project each appliance corner onto the segment axes (along u and along n).
+      let tMin = Infinity, tMax = -Infinity;
+      let nMin = Infinity, nMax = -Infinity;
+      for (const c of corners) {
+        const lx = c.x - p1.x, ly = c.y - p1.y;
+        const tProj = (lx * ux + ly * uy) / len; // parametric along segment
+        const nProj = lx * nx + ly * ny;          // perpendicular (positive = depth side)
+        if (tProj < tMin) tMin = tProj;
+        if (tProj > tMax) tMax = tProj;
+        if (nProj < nMin) nMin = nProj;
+        if (nProj > nMax) nMax = nProj;
+      }
+      // Appliance must overlap the cabinet's depth band [0, depth] and the segment range.
+      if (nMax < 0.05 || nMin > depth - 0.05) continue;
+      const t1 = Math.max(0, Math.min(1, tMin));
+      const t2 = Math.max(0, Math.min(1, tMax));
+      if (t2 - t1 > 1e-6) cuts.push({ t1, t2 });
+    }
+
+    if (cuts.length === 0) return [{ t1: 0, t2: 1 }];
+
+    // Merge overlapping cut ranges
+    cuts.sort((a, b) => a.t1 - b.t1);
+    const merged = [cuts[0]];
+    for (let i = 1; i < cuts.length; i++) {
+      const tail = merged[merged.length - 1];
+      if (cuts[i].t1 <= tail.t2 + 1e-6) tail.t2 = Math.max(tail.t2, cuts[i].t2);
+      else merged.push(cuts[i]);
+    }
+
+    // Invert: visible = [0,1] minus merged cuts
+    const visible = [];
+    let cursor = 0;
+    for (const c of merged) {
+      if (c.t1 > cursor + 1e-6) visible.push({ t1: cursor, t2: c.t1 });
+      cursor = Math.max(cursor, c.t2);
+    }
+    if (cursor < 1 - 1e-6) visible.push({ t1: cursor, t2: 1 });
+    return visible;
+  }
+
+  // Collect appliance corner sets (in world coords) that may overlap a cabinet
+  // shape — looks up appliances on the same story. Used both for live preview
+  // (where shape is the in-progress builder) and for committed cabinet shapes.
+  function applianceCornersOnSameStory(layerId) {
+    const out = [];
+    for (const story of state.stories) {
+      if (!story.visible) continue;
+      const owns = story.sublayers.some((l) => l.id === layerId);
+      if (!owns) continue;
+      for (const sub of story.sublayers) {
+        if (!sub.visible) continue;
+        for (const sh of sub.shapes) {
+          if (sh.type === "appliance") out.push(applianceCorners(sh));
+        }
+      }
+      break;
+    }
+    return out;
+  }
+
+  function drawCabinetShape(sh, color, sub) {
+    drawCabinetPath(sh.points, sh.depth, sh.side, color, 1.0, sub && sub.id);
+  }
+
+  // Draws a cabinet path (committed or in-progress). Splits the run around
+  // appliance footprints so the counter visually wraps around them.
+  function drawCabinetPath(points, depth, side, color, alpha, layerIdHint) {
+    if (points.length < 2) return;
+    const c = color || SHAPE_COLOR;
+    const cuts = applianceCornersOnSameStory(layerIdHint || (activeSublayer() && activeSublayer().id));
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = c;
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const offsetPts = offsetPolyline(points, depth, side);
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      const aOff = offsetPts[i] || a;
+      const bOff = offsetPts[i + 1] || b;
+      const visible = cabinetSegmentVisibleRanges(a, b, depth, side, cuts);
+
+      for (const { t1, t2 } of visible) {
+        const ax = a.x + (b.x - a.x) * t1;
+        const ay = a.y + (b.y - a.y) * t1;
+        const bx = a.x + (b.x - a.x) * t2;
+        const by = a.y + (b.y - a.y) * t2;
+        const aoX = aOff.x + (bOff.x - aOff.x) * t1;
+        const aoY = aOff.y + (bOff.y - aOff.y) * t1;
+        const boX = aOff.x + (bOff.x - aOff.x) * t2;
+        const boY = aOff.y + (bOff.y - aOff.y) * t2;
+
+        const A  = worldToScreen(ax, ay);
+        const B  = worldToScreen(bx, by);
+        const Ao = worldToScreen(aoX, aoY);
+        const Bo = worldToScreen(boX, boY);
+
+        // Closed polygon for this visible chunk
+        ctx.beginPath();
+        ctx.moveTo(A.x, A.y);
+        ctx.lineTo(B.x, B.y);
+        ctx.lineTo(Bo.x, Bo.y);
+        ctx.lineTo(Ao.x, Ao.y);
+        ctx.closePath();
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // ===========================================================================
+  // Shape registry
+  // ===========================================================================
+  // One entry per shape type. Adding a new shape type means adding one entry
+  // here (and a draw helper above). Dispatch sites — drawShape, shapeBBox,
+  // findShapeAtScreen, snapshotSelected, applyMove, applyRotate, applyResize,
+  // duplicateSelected, ensureTransformHistory, etc. — all route through this
+  // table instead of long if/else chains on sh.type.
+  //
+  // API per entry:
+  //   draw(sh, color, sub?)         render shape
+  //   bbox(sh)                      → { x1, y1, x2, y2 } in world units
+  //   hitDistance(sh, wp)           → world distance from wp; smaller = closer
+  //   snapCorners(sh)               → Array<{x,y}>; [] if none
+  //   capture(sh)                   → snapshot for transform start
+  //   restore(sh, o)                undo: copy snapshot back into sh
+  //   move(sh, o, dx, dy)           apply move using captured snapshot
+  //   rotate(sh, o, rot, dAngle)    apply rotate; rot(x,y)→{x,y}
+  //   resize(sh, o, anchor, sx, sy) apply scale (omit method = fixed-size)
+  //   duplicate(copy, sh, offset)   write offset positions into copy
+  //   cloneExtra(c, sh)?            extra deep-clone for composite types
+  //   selectionBg                   "bbox" | "path" | "line"
+  //   isOpening                     boolean | (sh)=>boolean — locks resize
+  // ===========================================================================
+
+  // Shared helpers — endpoint shapes (line, measure; arc extends them).
+  function endpointBBox(sh) {
+    return {
+      x1: Math.min(sh.x1, sh.x2),
+      y1: Math.min(sh.y1, sh.y2),
+      x2: Math.max(sh.x1, sh.x2),
+      y2: Math.max(sh.y1, sh.y2),
+    };
+  }
+  function endpointCapture(sh) {
+    return { x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2 };
+  }
+  function endpointRestore(sh, o) {
+    sh.x1 = o.x1; sh.y1 = o.y1; sh.x2 = o.x2; sh.y2 = o.y2;
+  }
+  function endpointMove(sh, o, dx, dy) {
+    sh.x1 = o.x1 + dx; sh.y1 = o.y1 + dy;
+    sh.x2 = o.x2 + dx; sh.y2 = o.y2 + dy;
+  }
+  function endpointRotate(sh, o, rot) {
+    const p1 = rot(o.x1, o.y1), p2 = rot(o.x2, o.y2);
+    sh.x1 = p1.x; sh.y1 = p1.y;
+    sh.x2 = p2.x; sh.y2 = p2.y;
+  }
+  function endpointResize(sh, o, anchor, sx, sy) {
+    sh.x1 = anchor.x + (o.x1 - anchor.x) * sx;
+    sh.y1 = anchor.y + (o.y1 - anchor.y) * sy;
+    sh.x2 = anchor.x + (o.x2 - anchor.x) * sx;
+    sh.y2 = anchor.y + (o.y2 - anchor.y) * sy;
+  }
+  function endpointDuplicate(copy, sh, offset) {
+    copy.x1 = sh.x1 + offset; copy.y1 = sh.y1 + offset;
+    copy.x2 = sh.x2 + offset; copy.y2 = sh.y2 + offset;
+  }
+  function endpointEndpoints(sh) {
+    return [{ x: sh.x1, y: sh.y1 }, { x: sh.x2, y: sh.y2 }];
+  }
+
+  // Shared helpers — anchor shapes (door, window, text, appliance).
+  function anchorCapture(sh) {
+    return { x: sh.x, y: sh.y, angle: sh.angle || 0 };
+  }
+  function anchorRestore(sh, o) {
+    sh.x = o.x; sh.y = o.y; sh.angle = o.angle;
+  }
+  function anchorMove(sh, o, dx, dy) {
+    sh.x = o.x + dx; sh.y = o.y + dy;
+  }
+  function anchorRotate(sh, o, rot, dAngle) {
+    const p = rot(o.x, o.y);
+    sh.x = p.x; sh.y = p.y;
+    sh.angle = (o.angle || 0) + dAngle;
+  }
+  function anchorDuplicate(copy, sh, offset) {
+    copy.x = sh.x + offset; copy.y = sh.y + offset;
+  }
+
+  function bboxFromXsYs(xs, ys) {
+    return {
+      x1: Math.min(...xs), y1: Math.min(...ys),
+      x2: Math.max(...xs), y2: Math.max(...ys),
+    };
+  }
+  function bboxFromPoints(pts) {
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return bboxFromXsYs(xs, ys);
+  }
+  function bboxFromShape(sh) {
+    return SHAPES[sh.type].bbox(sh);
+  }
+  function hitDistanceFromBBox(sh, wp) {
+    const b = bboxFromShape(sh);
+    return pointToRectDist(wp.x, wp.y, b.x1, b.y1, b.x2, b.y2);
+  }
+
+  // Per-shape helpers that are too large to inline in the registry literal.
+  function bboxDoor(sh) {
+    const { u, n } = doorAxes(sh);
+    const w = sh.width;
+    const Hx = sh.x, Hy = sh.y;
+    const Ex = Hx + u.x * w, Ey = Hy + u.y * w;
+    const xs = [], ys = [];
+    if (sh.subtype === "double") {
+      const halfW = w / 2;
+      xs.push(Hx, Ex, Hx + n.x * halfW, Ex + n.x * halfW);
+      ys.push(Hy, Ey, Hy + n.y * halfW, Ey + n.y * halfW);
+    } else if (sh.subtype === "sliding") {
+      const half = 0.3;
+      xs.push(Hx + n.x * half, Hx - n.x * half, Ex + n.x * half, Ex - n.x * half);
+      ys.push(Hy + n.y * half, Hy - n.y * half, Ey + n.y * half, Ey - n.y * half);
+    } else if (sh.subtype === "pocket") {
+      const off = 0.25;
+      const arr = 0.3;
+      xs.push(Hx, Ex, Hx + n.x * off, Ex + n.x * off, Hx - u.x * arr);
+      ys.push(Hy, Ey, Hy + n.y * off, Ey + n.y * off, Hy - u.y * arr);
+    } else if (sh.subtype === "garage") {
+      const off = 0.35;
+      xs.push(Hx, Ex, Hx + n.x * off, Ex + n.x * off);
+      ys.push(Hy, Ey, Hy + n.y * off, Ey + n.y * off);
+    } else {
+      const Tx = Hx + n.x * w, Ty = Hy + n.y * w;
+      xs.push(Hx, Ex, Tx); ys.push(Hy, Ey, Ty);
+    }
+    return bboxFromXsYs(xs, ys);
+  }
+  function bboxWindow(sh) {
+    const { u, n } = windowAxes(sh);
+    const w = sh.width;
+    const d = sh.depth || DEFAULT_WINDOW_DEPTH_FT;
+    const Hx = sh.x, Hy = sh.y;
+    const p2x = Hx + u.x * w, p2y = Hy + u.y * w;
+    const p3x = p2x + n.x * d, p3y = p2y + n.y * d;
+    const p4x = Hx + n.x * d, p4y = Hy + n.y * d;
+    return bboxFromXsYs([Hx, p2x, p3x, p4x], [Hy, p2y, p3y, p4y]);
+  }
+  function bboxText(sh) {
+    const sizePx = Math.max(2, sh.fontSize * effectiveScale());
+    ctx.save();
+    ctx.font = `${sizePx}px ${sh.fontFamily}`;
+    const m = ctx.measureText(sh.text || "");
+    ctx.restore();
+    const widthFt = m.width / effectiveScale();
+    const heightFt = sh.fontSize * 1.15;
+    const padFt = sh.fontSize * 0.3;
+    const padFtY = sh.fontSize * 0.18;
+    const angle = sh.angle || 0;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const corners = [
+      { x: -padFt, y: -padFtY },
+      { x: widthFt + padFt, y: -padFtY },
+      { x: widthFt + padFt, y: heightFt + padFtY },
+      { x: -padFt, y: heightFt + padFtY },
+    ];
+    const xs = [], ys = [];
+    for (const c of corners) {
+      xs.push(sh.x + cos * c.x - sin * c.y);
+      ys.push(sh.y + sin * c.x + cos * c.y);
+    }
+    return bboxFromXsYs(xs, ys);
+  }
+  function bboxStairs(sh) {
+    const xs = [], ys = [];
+    for (const seg of sh.segments) {
+      const u = { x: Math.cos(seg.angle), y: Math.sin(seg.angle) };
+      const p = { x: -u.y, y: u.x };
+      const halfW = seg.width / 2;
+      if (seg.type === "flight") {
+        xs.push(seg.x1 + p.x * halfW, seg.x1 - p.x * halfW, seg.x2 + p.x * halfW, seg.x2 - p.x * halfW);
+        ys.push(seg.y1 + p.y * halfW, seg.y1 - p.y * halfW, seg.y2 + p.y * halfW, seg.y2 - p.y * halfW);
+      } else if (seg.type === "landing") {
+        xs.push(
+          seg.x - u.x * halfW + p.x * halfW,
+          seg.x - u.x * halfW - p.x * halfW,
+          seg.x + u.x * halfW - p.x * halfW,
+          seg.x + u.x * halfW + p.x * halfW,
+        );
+        ys.push(
+          seg.y - u.y * halfW + p.y * halfW,
+          seg.y - u.y * halfW - p.y * halfW,
+          seg.y + u.y * halfW - p.y * halfW,
+          seg.y + u.y * halfW + p.y * halfW,
+        );
+      }
+    }
+    return bboxFromXsYs(xs, ys);
+  }
+  function stairsSnapCorners(sh) {
+    const out = [];
+    for (const seg of sh.segments) {
+      const u = { x: Math.cos(seg.angle), y: Math.sin(seg.angle) };
+      const p = { x: -u.y, y: u.x };
+      if (seg.type === "flight") {
+        const halfW = seg.width / 2;
+        out.push({ x: seg.x1 + p.x * halfW, y: seg.y1 + p.y * halfW });
+        out.push({ x: seg.x1 - p.x * halfW, y: seg.y1 - p.y * halfW });
+        out.push({ x: seg.x2 + p.x * halfW, y: seg.y2 + p.y * halfW });
+        out.push({ x: seg.x2 - p.x * halfW, y: seg.y2 - p.y * halfW });
+      } else if (seg.type === "landing") {
+        const half = seg.width / 2;
+        out.push({ x: seg.x - u.x * half + p.x * half, y: seg.y - u.y * half + p.y * half });
+        out.push({ x: seg.x - u.x * half - p.x * half, y: seg.y - u.y * half - p.y * half });
+        out.push({ x: seg.x + u.x * half - p.x * half, y: seg.y + u.y * half - p.y * half });
+        out.push({ x: seg.x + u.x * half + p.x * half, y: seg.y + u.y * half + p.y * half });
+      }
+    }
+    return out;
+  }
+  function stairsCapture(sh) {
+    return {
+      x: sh.x, y: sh.y, angle: sh.angle || 0,
+      segments: sh.segments.map((s) => ({ ...s })),
+    };
+  }
+  function stairsRestore(sh, o) {
+    sh.x = o.x; sh.y = o.y; sh.angle = o.angle;
+    sh.segments = o.segments.map((s) => ({ ...s }));
+  }
+  function stairsMove(sh, o, dx, dy) {
+    sh.x = o.x + dx; sh.y = o.y + dy;
+    for (let i = 0; i < sh.segments.length; i++) {
+      const seg = sh.segments[i];
+      const oseg = o.segments[i];
+      if (seg.type === "flight") {
+        seg.x1 = oseg.x1 + dx; seg.y1 = oseg.y1 + dy;
+        seg.x2 = oseg.x2 + dx; seg.y2 = oseg.y2 + dy;
+      } else if (seg.type === "landing") {
+        seg.x = oseg.x + dx; seg.y = oseg.y + dy;
+      }
+    }
+  }
+  function stairsRotate(sh, o, rot, dAngle) {
+    const p = rot(o.x, o.y);
+    sh.x = p.x; sh.y = p.y;
+    sh.angle = (o.angle || 0) + dAngle;
+    for (let i = 0; i < sh.segments.length; i++) {
+      const seg = sh.segments[i];
+      const oseg = o.segments[i];
+      if (seg.type === "flight") {
+        const p1 = rot(oseg.x1, oseg.y1);
+        const p2 = rot(oseg.x2, oseg.y2);
+        seg.x1 = p1.x; seg.y1 = p1.y;
+        seg.x2 = p2.x; seg.y2 = p2.y;
+        seg.angle = oseg.angle + dAngle;
+      } else if (seg.type === "landing") {
+        const pl = rot(oseg.x, oseg.y);
+        seg.x = pl.x; seg.y = pl.y;
+        seg.angle = oseg.angle + dAngle;
+      }
+    }
+  }
+  function stairsDuplicate(copy, sh, offset) {
+    copy.x = sh.x + offset; copy.y = sh.y + offset;
+    copy.segments = sh.segments.map((seg) => {
+      const out = { ...seg };
+      if (seg.type === "flight") {
+        out.x1 = seg.x1 + offset; out.y1 = seg.y1 + offset;
+        out.x2 = seg.x2 + offset; out.y2 = seg.y2 + offset;
+      } else if (seg.type === "landing") {
+        out.x = seg.x + offset; out.y = seg.y + offset;
+      }
+      return out;
+    });
+  }
+  function stairsCloneExtra(c, sh) {
+    if (Array.isArray(sh.segments)) {
+      c.segments = sh.segments.map((s) => ({ ...s }));
+    }
+  }
+
+  function cabinetCapture(sh) {
+    return { points: sh.points.map((p) => ({ x: p.x, y: p.y })) };
+  }
+  function cabinetRestore(sh, o) {
+    if (o.points) sh.points = o.points.map((p) => ({ x: p.x, y: p.y }));
+  }
+  function cabinetMove(sh, o, dx, dy) {
+    for (let i = 0; i < sh.points.length; i++) {
+      sh.points[i].x = o.points[i].x + dx;
+      sh.points[i].y = o.points[i].y + dy;
+    }
+  }
+  function cabinetRotate(sh, o, rot) {
+    for (let i = 0; i < sh.points.length; i++) {
+      const p = rot(o.points[i].x, o.points[i].y);
+      sh.points[i].x = p.x; sh.points[i].y = p.y;
+    }
+  }
+  function cabinetDuplicate(copy, sh, offset) {
+    copy.points = sh.points.map((p) => ({ x: p.x + offset, y: p.y + offset }));
+  }
+  function cabinetCloneExtra(c, sh) {
+    if (Array.isArray(sh.points)) {
+      c.points = sh.points.map((p) => ({ x: p.x, y: p.y }));
+    }
+  }
+
+  const SHAPES = {
+    line: {
+      draw: drawLineShape,
+      bbox: endpointBBox,
+      hitDistance: (sh, wp) => pointToSegmentDist(wp.x, wp.y, sh.x1, sh.y1, sh.x2, sh.y2),
+      snapCorners: endpointEndpoints,
+      capture: endpointCapture,
+      restore: endpointRestore,
+      move: endpointMove,
+      rotate: endpointRotate,
+      resize: endpointResize,
+      duplicate: endpointDuplicate,
+      selectionBg: "line",
+      isOpening: false,
+    },
+    measure: {
+      draw: drawMeasureShape,
+      bbox: (sh) => {
+        const e = measureDimEndpoints(sh);
+        return bboxFromXsYs(
+          [sh.x1, sh.x2, e.ax, e.bx],
+          [sh.y1, sh.y2, e.ay, e.by],
+        );
+      },
+      hitDistance: (sh, wp) => {
+        const ends = measureDimEndpoints(sh);
+        return Math.min(
+          pointToSegmentDist(wp.x, wp.y, sh.x1, sh.y1, sh.x2, sh.y2),
+          pointToSegmentDist(wp.x, wp.y, ends.ax, ends.ay, ends.bx, ends.by),
+        );
+      },
+      snapCorners: endpointEndpoints,
+      capture: endpointCapture,
+      restore: endpointRestore,
+      move: endpointMove,
+      rotate: endpointRotate,
+      resize: endpointResize,
+      duplicate: endpointDuplicate,
+      selectionBg: "line",
+      isOpening: false,
+    },
+    arc: {
+      draw: drawArcShape,
+      bbox: (sh) => {
+        if (sh.mx === undefined) return endpointBBox(sh);
+        const ext = arcBBoxPoints(sh);
+        return bboxFromXsYs(ext.xs, ext.ys);
+      },
+      hitDistance: (sh, wp) => pointToArcDist(wp.x, wp.y, sh),
+      snapCorners: endpointEndpoints,
+      capture: (sh) => {
+        const o = endpointCapture(sh);
+        if (sh.mx !== undefined) { o.mx = sh.mx; o.my = sh.my; }
+        return o;
+      },
+      restore: (sh, o) => {
+        endpointRestore(sh, o);
+        if (o.mx !== undefined) { sh.mx = o.mx; sh.my = o.my; }
+      },
+      move: (sh, o, dx, dy) => {
+        endpointMove(sh, o, dx, dy);
+        if (o.mx !== undefined) {
+          sh.mx = o.mx + dx; sh.my = o.my + dy;
+        }
+      },
+      rotate: (sh, o, rot) => {
+        endpointRotate(sh, o, rot);
+        if (o.mx !== undefined) {
+          const pm = rot(o.mx, o.my);
+          sh.mx = pm.x; sh.my = pm.y;
+        }
+      },
+      resize: (sh, o, anchor, sx, sy) => {
+        endpointResize(sh, o, anchor, sx, sy);
+        if (o.mx !== undefined) {
+          sh.mx = anchor.x + (o.mx - anchor.x) * sx;
+          sh.my = anchor.y + (o.my - anchor.y) * sy;
+        }
+      },
+      duplicate: (copy, sh, offset) => {
+        endpointDuplicate(copy, sh, offset);
+        if (sh.mx !== undefined) {
+          copy.mx = sh.mx + offset; copy.my = sh.my + offset;
+        }
+      },
+      selectionBg: "path",
+      isOpening: false,
+    },
+    door: {
+      draw: drawDoorShape,
+      bbox: bboxDoor,
+      hitDistance: hitDistanceFromBBox,
+      snapCorners: (sh) => {
+        const u = { x: Math.cos(sh.angle), y: Math.sin(sh.angle) };
+        return [
+          { x: sh.x, y: sh.y },
+          { x: sh.x + u.x * sh.width, y: sh.y + u.y * sh.width },
+        ];
+      },
+      capture: anchorCapture,
+      restore: anchorRestore,
+      move: anchorMove,
+      rotate: anchorRotate,
+      duplicate: anchorDuplicate,
+      // resize omitted: doors are sized via the dimension modal.
+      selectionBg: "bbox",
+      isOpening: true,
+    },
+    window: {
+      draw: drawWindowShape,
+      bbox: bboxWindow,
+      hitDistance: hitDistanceFromBBox,
+      snapCorners: (sh) => {
+        // All four corners — windows have real depth and users measure to the
+        // inside (room-side) edge as often as to the wall edge.
+        const u = { x: Math.cos(sh.angle), y: Math.sin(sh.angle) };
+        const n = { x: -u.y, y: u.x };
+        const w = sh.width, d = sh.depth || DEFAULT_WINDOW_DEPTH_FT;
+        return [
+          { x: sh.x,                       y: sh.y                       },
+          { x: sh.x + u.x * w,             y: sh.y + u.y * w             },
+          { x: sh.x + u.x * w + n.x * d,   y: sh.y + u.y * w + n.y * d   },
+          { x: sh.x + n.x * d,             y: sh.y + n.y * d             },
+        ];
+      },
+      capture: anchorCapture,
+      restore: anchorRestore,
+      move: anchorMove,
+      rotate: anchorRotate,
+      duplicate: anchorDuplicate,
+      selectionBg: "bbox",
+      isOpening: true,
+    },
+    text: {
+      draw: drawTextShape,
+      bbox: bboxText,
+      hitDistance: hitDistanceFromBBox,
+      snapCorners: (sh) => [{ x: sh.x, y: sh.y }],
+      capture: anchorCapture,
+      restore: anchorRestore,
+      move: anchorMove,
+      rotate: anchorRotate,
+      duplicate: anchorDuplicate,
+      selectionBg: "bbox",
+      isOpening: true,
+    },
+    appliance: {
+      draw: drawApplianceShape,
+      bbox: (sh) => bboxFromPoints(applianceCorners(sh)),
+      hitDistance: hitDistanceFromBBox,
+      snapCorners: (sh) => applianceCorners(sh),
+      capture: (sh) => ({
+        x: sh.x, y: sh.y, angle: sh.angle || 0,
+        width: sh.width, depth: sh.depth,
+      }),
+      restore: (sh, o) => {
+        sh.x = o.x; sh.y = o.y; sh.angle = o.angle;
+        if (o.width !== undefined) sh.width = o.width;
+        if (o.depth !== undefined) sh.depth = o.depth;
+      },
+      move: anchorMove,
+      rotate: anchorRotate,
+      resize: (sh, o, anchor, sx, sy) => {
+        // Only islands resize, and only when axis-aligned (resize math doesn't
+        // preserve rotation cleanly).
+        if (sh.kind !== "island" || Math.abs(o.angle || 0) > 1e-6) return;
+        const newX1 = anchor.x + (o.x - anchor.x) * sx;
+        const newY1 = anchor.y + (o.y - anchor.y) * sy;
+        const newX2 = anchor.x + (o.x + o.width - anchor.x) * sx;
+        const newY2 = anchor.y + (o.y + o.depth - anchor.y) * sy;
+        sh.x = Math.min(newX1, newX2);
+        sh.y = Math.min(newY1, newY2);
+        sh.width = Math.max(0.5, Math.abs(newX2 - newX1));
+        sh.depth = Math.max(0.5, Math.abs(newY2 - newY1));
+      },
+      duplicate: anchorDuplicate,
+      selectionBg: "bbox",
+      // Non-island appliances and rotated islands count as "openings" — block
+      // the resize handles in mixed selections.
+      isOpening: (sh) => sh.kind !== "island" || Math.abs(sh.angle || 0) > 1e-6,
+    },
+    stairs: {
+      draw: drawStairsShape,
+      bbox: bboxStairs,
+      hitDistance: hitDistanceFromBBox,
+      snapCorners: stairsSnapCorners,
+      capture: stairsCapture,
+      restore: stairsRestore,
+      move: stairsMove,
+      rotate: stairsRotate,
+      duplicate: stairsDuplicate,
+      cloneExtra: stairsCloneExtra,
+      selectionBg: "bbox",
+      isOpening: true,
+    },
+    cabinet: {
+      draw: drawCabinetShape,
+      bbox: (sh) => {
+        const inner = sh.points;
+        const outer = offsetPolyline(sh.points, sh.depth, sh.side);
+        return bboxFromPoints([...inner, ...outer]);
+      },
+      hitDistance: (sh, wp) => {
+        // Hit-test the back-edge polyline AND the depth-offset polyline.
+        let d = Infinity;
+        const offsetPts = offsetPolyline(sh.points, sh.depth, sh.side);
+        for (let i = 0; i < sh.points.length - 1; i++) {
+          const a = sh.points[i], b = sh.points[i + 1];
+          const ao = offsetPts[i] || a, bo = offsetPts[i + 1] || b;
+          d = Math.min(d, pointToSegmentDist(wp.x, wp.y, a.x, a.y, b.x, b.y));
+          d = Math.min(d, pointToSegmentDist(wp.x, wp.y, ao.x, ao.y, bo.x, bo.y));
+        }
+        return d;
+      },
+      snapCorners: () => [],
+      capture: cabinetCapture,
+      restore: cabinetRestore,
+      move: cabinetMove,
+      rotate: cabinetRotate,
+      duplicate: cabinetDuplicate,
+      cloneExtra: cabinetCloneExtra,
+      selectionBg: "bbox",
+      isOpening: true,
+    },
+  };
+
+  function drawShape(sh, color, sub) {
+    SHAPES[sh.type].draw(sh, color, sub);
+  }
+
+  function drawShapeStrokeUnder(sh, color, lineWidth) {
+    const bg = SHAPES[sh.type]?.selectionBg;
+    if (bg === "bbox") {
+      const b = shapeBBox(sh);
+      const tl = worldToScreen(b.x1, b.y1);
+      const br = worldToScreen(b.x2, b.y2);
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.fillRect(tl.x - 2, tl.y - 2, br.x - tl.x + 4, br.y - tl.y + 4);
+      ctx.restore();
+      return;
+    }
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    if (bg === "path") {
+      pathFromSamples(sampleArcPoints(sh));
+    } else {
+      const a = worldToScreen(sh.x1, sh.y1);
+      const b = worldToScreen(sh.x2, sh.y2);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSelectedShapeGlow() {
+    if (!state.selection.size) return;
+    forEachVisibleShape((sh) => {
+      if (state.selection.has(sh.id)) drawShapeStrokeUnder(sh, SELECT_GLOW, 6);
+    });
+  }
+
+  function drawCurveHover() { /* curve tool removed; in-selection handle handles this */ }
+
+  function drawAllShapes() {
+    forEachVisibleShape((sh, sub) => drawShape(sh, sub.color || DEFAULT_LAYER_COLOR_FALLBACK, sub));
+  }
+
+  // Default offset (in feet) for a measurement, sign chosen by the perpendicular
+  // component of the raw cursor relative to the AB axis. When the user clicks
+  // exactly on the snap target (perp ~ 0) we default to +grid in the +n direction.
+  function computeMeasureOffset(start, end, rawCursor) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const len = Math.hypot(dx, dy);
+    const g = state.gridSize;
+    if (len < 1e-6) return g;
+    const nx = -dy / len, ny = dx / len;
+    const perp = (rawCursor.x - start.x) * nx + (rawCursor.y - start.y) * ny;
+    // Sign comes from which side the cursor is on; magnitude rounds to a whole
+    // grid square, with a minimum of one square (the user's stated default).
+    if (Math.abs(perp) < 1e-6) return g;
+    const sign = perp >= 0 ? 1 : -1;
+    return sign * Math.max(g, Math.round(Math.abs(perp) / g) * g);
+  }
+
+  function drawPending() {
+    if (!state.pending) return;
+    if (state.pending.type === "box") {
+      const a = worldToScreen(state.pending.start.x, state.pending.start.y);
+      const snapped = snapWorld(state.cursorWorld);
+      const b = worldToScreen(snapped.x, snapped.y);
+      ctx.save();
+      ctx.strokeStyle = "rgba(45, 78, 224, 0.85)";
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1.25;
+      ctx.strokeRect(
+        Math.min(a.x, b.x), Math.min(a.y, b.y),
+        Math.abs(b.x - a.x), Math.abs(b.y - a.y),
+      );
+      ctx.setLineDash([]);
+      ctx.fillStyle = SELECT_COLOR;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, 3, 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      const wFt = Math.abs(snapped.x - state.pending.start.x);
+      const hFt = Math.abs(snapped.y - state.pending.start.y);
+      drawCursorLabel(`${formatFeet(wFt)} × ${formatFeet(hFt)}`, b, "rgba(45, 78, 224, 0.95)");
+      return;
+    }
+    if (state.pending.type !== "line" && state.pending.type !== "measure") return;
+
+    const start = state.pending.start;
+    const end = constrainLine(start, state.cursorWorld, state.shiftDown);
+    const isMeasure = state.pending.type === "measure";
+    const snapped = isMeasure ? snapMeasurePoint(end) : snapWorld(end);
+    const a = worldToScreen(start.x, start.y);
+    const b = worldToScreen(snapped.x, snapped.y);
+
+    if (isMeasure) {
+      // Live preview of the architectural dimension at the auto-offset position.
+      const offsetFt = computeMeasureOffset(start, snapped, state.cursorWorld);
+      const offsetPx = offsetFt * effectiveScale();
+      const lenFt = Math.hypot(snapped.x - start.x, snapped.y - start.y);
+      drawDimension(a, b, lenFt, offsetPx, MEASURE_COLOR, 0.6);
+
+      // Mark the pending start so the user can see where they anchored.
+      ctx.save();
+      ctx.fillStyle = MEASURE_COLOR;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(45, 78, 224, 0.85)";
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+    ctx.fillStyle = SELECT_COLOR;
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, 3, 0, Math.PI * 2);
+    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    const lenFt = Math.hypot(snapped.x - start.x, snapped.y - start.y);
+    drawCursorLabel(formatFeet(lenFt), b, "rgba(45, 78, 224, 0.95)");
+  }
+
+  function drawSnapHint() {
+    if (state.tool !== "line" && state.tool !== "measure" && state.selectionMode !== "curve") return;
+
+    // For the measure tool, an endpoint snap takes priority over grid snap and
+    // is shown as a red square so the user can tell the cursor is locked to a
+    // shape edge rather than a grid intersection.
+    if (state.tool === "measure") {
+      const ep = findNearestEndpoint(state.cursorWorld);
+      if (ep) {
+        const s = worldToScreen(ep.x, ep.y);
+        ctx.save();
+        ctx.strokeStyle = MEASURE_COLOR;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.rect(s.x - 5, s.y - 5, 10, 10);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+    }
+
+    if (!state.snap) return;
+    const p = snapWorld(state.cursorWorld);
+    const s = worldToScreen(p.x, p.y);
+    ctx.save();
+    ctx.strokeStyle = "rgba(45, 78, 224, 0.7)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCursorLabel(text, screenPos, bgColor) {
+    ctx.save();
+    ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif";
+    const m = ctx.measureText(text);
+    const padX = 8;
+    const w = m.width + padX * 2;
+    const h = 22;
+    const offX = 14, offY = 14;
+    let x = screenPos.x + offX;
+    let y = screenPos.y - offY - h;
+
+    const view = viewSize();
+    if (x + w > view.w - 4) x = screenPos.x - offX - w;
+    if (y < 4) y = screenPos.y + offY;
+
+    ctx.fillStyle = bgColor || "rgba(45, 78, 224, 0.95)";
+    fillRoundedRect(x, y, w, h, 5);
+
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + padX, y + h / 2);
+    ctx.restore();
+  }
+
+  // Returns the world-space curve handle for a single selected line/arc, or null.
+  function curveHandleShape() {
+    if (state.tool !== "select") return null;
+    if (state.selection.size !== 1) return null;
+    let shape = null;
+    for (const id of state.selection) shape = findShapeById(id);
+    if (!shape) return null;
+    if (shape.type !== "line" && shape.type !== "arc") return null;
+    return shape;
+  }
+
+  function curveHandlePoint(shape) {
+    if (shape.type === "arc" && shape.mx !== undefined) {
+      return { x: shape.mx, y: shape.my };
+    }
+    return { x: (shape.x1 + shape.x2) / 2, y: (shape.y1 + shape.y2) / 2 };
+  }
+
+  function drawCurveHandle() {
+    if (state.selectionMode === "marquee") return;
+    const shape = curveHandleShape();
+    if (!shape) return;
+    const p = curveHandlePoint(shape);
+    const sp = worldToScreen(p.x, p.y);
+
+    ctx.save();
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = SELECT_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Tiny inner dot for affordance
+    ctx.fillStyle = SELECT_COLOR;
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCurvePreview() { /* unused — handle is drawn live via drawCurveHandle */ }
+
+  function drawPlacingPreview() {
+    if (!state.placing) return;
+    const view = viewSize();
+    const sp = state.cursorScreen;
+    if (!sp) return;
+    if (sp.x < 0 || sp.x > view.w || sp.y < 0 || sp.y > view.h) return;
+
+    const def = state.placing.def;
+    const sectionKey = state.placing.sectionKey;
+
+    let shape;
+    let pos;
+    if (sectionKey === "kitchen") {
+      const wallBack = def.kind === "island"
+        ? null
+        : detectWallBackedPosition(state.cursorWorld, def.width, def.depth, applianceWallGap(def.kind));
+      if (wallBack) {
+        shape = {
+          type: "appliance",
+          x: wallBack.x, y: wallBack.y,
+          width: def.width,
+          depth: def.depth,
+          angle: wallBack.angle,
+          kind: def.kind,
+          label: def.name,
+        };
+        pos = { x: wallBack.x, y: wallBack.y };
+      } else {
+        pos = snapWorldHalf(state.cursorWorld);
+        shape = {
+          type: "appliance",
+          x: pos.x - def.width / 2,
+          y: pos.y - def.depth / 2,
+          width: def.width,
+          depth: def.depth,
+          angle: 0,
+          kind: def.kind,
+          label: def.name,
+        };
+      }
+    } else {
+      const aligned = detectAlignedPosition(state.cursorWorld, def.width);
+      pos = aligned || snapWorldHalf(state.cursorWorld);
+      const angle = aligned ? aligned.angle : 0;
+
+      if (sectionKey === "windows") {
+        shape = {
+          type: "window",
+          x: pos.x, y: pos.y,
+          width: def.width,
+          depth: DEFAULT_WINDOW_DEPTH_FT,
+          angle,
+        };
+      } else {
+        shape = {
+          type: "door",
+          x: pos.x, y: pos.y,
+          width: def.width,
+          angle,
+          swing: 1,
+          subtype: def.subtype || "swing",
+        };
+      }
+    }
+
+    const layer = activeSublayer();
+    const previewColor = layer?.color || DEFAULT_LAYER_COLOR_FALLBACK;
+
+    ctx.save();
+    ctx.globalAlpha = 0.65;
+    drawShape(shape, previewColor);
+    ctx.restore();
+
+    drawCursorLabel(def.name, state.cursorScreen, "rgba(45, 78, 224, 0.95)");
+  }
+
+  // ---------- Selection rendering ----------
+  function drawSelection() {
+    if (state.tool !== "select") return;
+    if (!state.selection.size) return;
+    const bbox = selectionBBox();
+    if (!bbox) return;
+
+    const tl = worldToScreen(bbox.x1, bbox.y1);
+    const br = worldToScreen(bbox.x2, bbox.y2);
+
+    ctx.save();
+    ctx.strokeStyle = SELECT_LINE_SOFT;
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      Math.round(tl.x) + 0.5, Math.round(tl.y) + 0.5,
+      Math.round(br.x - tl.x), Math.round(br.y - tl.y)
+    );
+    ctx.setLineDash([]);
+
+    if (!hasOpeningSelected()) {
+      const handles = getHandlePositions(bbox);
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = SELECT_COLOR;
+      ctx.lineWidth = 1.5;
+      for (const name in handles) {
+        const sp = worldToScreen(handles[name].x, handles[name].y);
+        ctx.fillRect(sp.x - 4, sp.y - 4, 8, 8);
+        ctx.strokeRect(sp.x - 4, sp.y - 4, 8, 8);
+      }
+    } else {
+      // Show small corner dots so users can see where to grab for rotate
+      const handles = getHandlePositions(bbox);
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = SELECT_COLOR;
+      ctx.lineWidth = 1.25;
+      for (const c of ["nw", "ne", "se", "sw"]) {
+        const sp = worldToScreen(handles[c].x, handles[c].y);
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawMarquee() {
+    if (!state.marquee) return;
+    const m = state.marquee;
+    const x1 = Math.min(m.x1, m.x2), x2 = Math.max(m.x1, m.x2);
+    const y1 = Math.min(m.y1, m.y2), y2 = Math.max(m.y1, m.y2);
+    const tl = worldToScreen(x1, y1);
+    const br = worldToScreen(x2, y2);
+
+    ctx.save();
+    ctx.fillStyle = SELECT_FILL_SOFT;
+    ctx.strokeStyle = SELECT_LINE_SOFT;
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1;
+    ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+    ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+    ctx.restore();
+  }
+
+  // ---------- Render entrypoint ----------
+  function render() {
+    const { w, h } = viewSize();
+    ctx.clearRect(0, 0, w, h);
+    drawGrid();
+    drawSelectedShapeGlow();
+    drawAllShapes();
+    drawSelection();
+    drawCurveHandle();
+    drawMarquee();
+    drawPlacingPreview();
+    drawStairsGhost();
+    drawCabinetPreview();
+    drawSnapHint();
+    drawPending();
+    updateDimModal();
+    updateLineModal();
+    updateTextModal();
+  }
+
+  // ---------- Tools ----------
+  function constrainLine(a, b, shift) {
+    if (!shift) return b;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const angle = Math.atan2(dy, dx);
+    const step = Math.PI / 4;
+    const snapped = Math.round(angle / step) * step;
+    const len = Math.hypot(dx, dy);
+    return { x: a.x + Math.cos(snapped) * len, y: a.y + Math.sin(snapped) * len };
+  }
+
+  // Tools that draw shapes onto the active sublayer. They're disabled when the
+  // active layer has its own palette (Doors & Windows, Kitchen, …) so the user
+  // is forced to switch layers — palette layers expect items from the palette,
+  // not freehand strokes. Add new drawing tools here as they're built.
+  const LAYER_DRAW_TOOLS = new Set(["line", "stairs", "box"]);
+
+  function isLayerDrawingBlocked() {
+    return !!paletteSpecForLayer(activeSublayer());
+  }
+
+  function updateToolButtonsForLayer() {
+    const blocked = isLayerDrawingBlocked();
+    for (const btn of toolListEl.querySelectorAll(".tool")) {
+      const t = btn.dataset.tool;
+      btn.classList.toggle("disabled", LAYER_DRAW_TOOLS.has(t) && blocked);
+    }
+  }
+
+  function setTool(tool) {
+    // Refuse drawing tools on palette layers — silently fall back to select
+    // rather than putting the canvas in a broken "drawing on Kitchen" state.
+    if (LAYER_DRAW_TOOLS.has(tool) && isLayerDrawingBlocked()) {
+      tool = "select";
+    }
+    state.tool = tool;
+    state.pending = null;
+    if (tool !== "select") {
+      state.marquee = null;
+      state.selectionMode = null;
+      state.selectionData = null;
+      state.curveDrag = null;
+    }
+    for (const btn of toolListEl.querySelectorAll(".tool")) {
+      btn.classList.toggle("active", btn.dataset.tool === tool);
+    }
+    wrap.classList.remove("tool-line", "tool-pan", "tool-select", "tool-measure", "tool-text", "tool-stairs", "tool-box", "tool-cabinet");
+    wrap.classList.add("tool-" + tool);
+    if (tool !== "text") cancelTextInline();
+    if (tool !== "stairs") {
+      state.stairsDirection = null;
+      hideStairsModal();
+    }
+    if (tool !== "cabinet" && state.cabinetBuilder) {
+      // User picked a different tool mid-build — auto-commit anything substantial
+      // so they don't lose work; otherwise just discard the lone start node.
+      if (state.cabinetBuilder.points.length >= 2) commitCabinet(state.cabinetBuilder);
+      state.cabinetBuilder = null;
+      detachCabinetModalFromPalette();
+      renderPalette();
+    }
+    canvas.style.cursor = "";
+    statusTool.textContent = tool.charAt(0).toUpperCase() + tool.slice(1);
+    render();
+  }
+
+  // ---------- Selection helpers ----------
+  function findShapeAtScreen(sx, sy) {
+    const wp = screenToWorld(sx, sy);
+    const tol = SHAPE_HIT / effectiveScale();
+    let best = null;
+    let bestDist = Infinity;
+    forEachVisibleShape((sh) => {
+      const handler = SHAPES[sh.type];
+      if (!handler?.hitDistance) return;
+      const d = handler.hitDistance(sh, wp);
+      if (d <= tol && d < bestDist) {
+        bestDist = d;
+        best = sh;
+      }
+    });
+    return best;
+  }
+
+  // World-space endpoints of the offset dimension line for a measure shape.
+  function measureDimEndpoints(sh) {
+    const offset = sh.offset || 0;
+    const dx = sh.x2 - sh.x1, dy = sh.y2 - sh.y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-9) return { ax: sh.x1, ay: sh.y1, bx: sh.x2, by: sh.y2 };
+    const nx = -dy / len, ny = dx / len;
+    return {
+      ax: sh.x1 + nx * offset,
+      ay: sh.y1 + ny * offset,
+      bx: sh.x2 + nx * offset,
+      by: sh.y2 + ny * offset,
+    };
+  }
+
+  function shapeBBox(sh) {
+    return SHAPES[sh.type].bbox(sh);
+  }
+
+  function getSelectedShapes() {
+    const list = [];
+    forEachShape((sh) => { if (state.selection.has(sh.id)) list.push(sh); });
+    return list;
+  }
+
+  function selectionBBox() {
+    const shapes = getSelectedShapes();
+    if (!shapes.length) return null;
+    let xa = Infinity, ya = Infinity, xb = -Infinity, yb = -Infinity;
+    for (const sh of shapes) {
+      const b = shapeBBox(sh);
+      if (b.x1 < xa) xa = b.x1;
+      if (b.y1 < ya) ya = b.y1;
+      if (b.x2 > xb) xb = b.x2;
+      if (b.y2 > yb) yb = b.y2;
+    }
+    return { x1: xa, y1: ya, x2: xb, y2: yb };
+  }
+
+  function getHandlePositions(bbox) {
+    const cx = (bbox.x1 + bbox.x2) / 2;
+    const cy = (bbox.y1 + bbox.y2) / 2;
+    return {
+      nw: { x: bbox.x1, y: bbox.y1 },
+      n:  { x: cx,      y: bbox.y1 },
+      ne: { x: bbox.x2, y: bbox.y1 },
+      e:  { x: bbox.x2, y: cy      },
+      se: { x: bbox.x2, y: bbox.y2 },
+      s:  { x: cx,      y: bbox.y2 },
+      sw: { x: bbox.x1, y: bbox.y2 },
+      w:  { x: bbox.x1, y: cy      },
+    };
+  }
+
+  // True when the selection contains anything that should NOT show edge resize
+  // handles. Islands are the one exception among appliances — but only when
+  // axis-aligned (resize math doesn't preserve rotation cleanly).
+  function hasOpeningSelected() {
+    let found = false;
+    forEachShape((sh) => {
+      if (!state.selection.has(sh.id)) return;
+      const v = SHAPES[sh.type]?.isOpening;
+      if (typeof v === "function" ? v(sh) : v) found = true;
+    });
+    return found;
+  }
+
+  function findHandleAtScreen(sx, sy, bbox) {
+    const handles = getHandlePositions(bbox);
+    const skipResize = hasOpeningSelected();
+
+    if (!skipResize) {
+      for (const name in handles) {
+        const sp = worldToScreen(handles[name].x, handles[name].y);
+        if (Math.abs(sx - sp.x) <= HANDLE_HIT && Math.abs(sy - sp.y) <= HANDLE_HIT) return name;
+      }
+    }
+
+    const tl = worldToScreen(bbox.x1, bbox.y1);
+    const br = worldToScreen(bbox.x2, bbox.y2);
+    const corners = ["nw", "ne", "se", "sw"];
+    for (const c of corners) {
+      const sp = worldToScreen(handles[c].x, handles[c].y);
+      const dx = sx - sp.x, dy = sy - sp.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist >= ROT_INNER && dist <= ROT_OUTER) {
+        const outside = sx < tl.x || sx > br.x || sy < tl.y || sy > br.y;
+        if (outside) return "rotate-" + c;
+      }
+    }
+    return null;
+  }
+
+  function oppositeAnchor(handle, bbox) {
+    const cx = (bbox.x1 + bbox.x2) / 2;
+    const cy = (bbox.y1 + bbox.y2) / 2;
+    switch (handle) {
+      case "nw": return { x: bbox.x2, y: bbox.y2 };
+      case "n":  return { x: cx,      y: bbox.y2 };
+      case "ne": return { x: bbox.x1, y: bbox.y2 };
+      case "e":  return { x: bbox.x1, y: cy      };
+      case "se": return { x: bbox.x1, y: bbox.y1 };
+      case "s":  return { x: cx,      y: bbox.y1 };
+      case "sw": return { x: bbox.x2, y: bbox.y1 };
+      case "w":  return { x: bbox.x2, y: cy      };
+    }
+    return { x: cx, y: cy };
+  }
+
+  function snapshotSelected() {
+    const map = new Map();
+    forEachShape((sh) => {
+      if (state.selection.has(sh.id)) {
+        map.set(sh.id, SHAPES[sh.type].capture(sh));
+      }
+    });
+    return map;
+  }
+
+  function cursorForHandle(h) {
+    if (h && h.startsWith("rotate")) return "grab";
+    return ({
+      nw: "nwse-resize", se: "nwse-resize",
+      ne: "nesw-resize", sw: "nesw-resize",
+      n: "ns-resize", s: "ns-resize",
+      e: "ew-resize", w: "ew-resize",
+    })[h] || "default";
+  }
+
+  function updateSelectCursor(sp) {
+    if (state.selectionMode) return;
+    if (curveHandleHitAt(sp)) { canvas.style.cursor = "grab"; return; }
+    if (state.selection.size > 0) {
+      const bbox = selectionBBox();
+      if (bbox) {
+        const h = findHandleAtScreen(sp.x, sp.y, bbox);
+        if (h) { canvas.style.cursor = cursorForHandle(h); return; }
+      }
+    }
+    const hit = findShapeAtScreen(sp.x, sp.y);
+    canvas.style.cursor = hit ? "move" : "default";
+  }
+
+  // ---------- Selection ops ----------
+  function deleteSelected() {
+    if (!state.selection.size) return;
+    pushHistory();
+    for (const story of state.stories) {
+      for (const sub of story.sublayers) {
+        sub.shapes = sub.shapes.filter((sh) => !state.selection.has(sh.id));
+      }
+    }
+    state.selection.clear();
+  }
+
+  function duplicateSelected() {
+    if (!state.selection.size) return;
+    pushHistory();
+    const offset = Math.max(state.gridSize, 1);
+    const newIds = new Set();
+    for (const story of state.stories) {
+      for (const sub of story.sublayers) {
+        const dups = [];
+        for (const sh of sub.shapes) {
+          if (state.selection.has(sh.id)) {
+            const copy = { ...sh, id: makeId("X") };
+            SHAPES[sh.type].duplicate(copy, sh, offset);
+            dups.push(copy);
+            newIds.add(copy.id);
+          }
+        }
+        sub.shapes.push(...dups);
+      }
+    }
+    state.selection = newIds;
+  }
+
+  // ---------- Select-tool transforms ----------
+  function startMove(wp) {
+    state.selectionMode = "move";
+    state.selectionData = {
+      startWorld: wp,
+      originalShapes: snapshotSelected(),
+      historyPushed: false,
+    };
+  }
+
+  function startResize(handle, bbox) {
+    state.selectionMode = "resize";
+    state.selectionData = {
+      handle,
+      anchor: oppositeAnchor(handle, bbox),
+      startBBox: { ...bbox },
+      originalShapes: snapshotSelected(),
+      historyPushed: false,
+    };
+  }
+
+  function startRotate(wp, bbox) {
+    const cx = (bbox.x1 + bbox.x2) / 2;
+    const cy = (bbox.y1 + bbox.y2) / 2;
+    state.selectionMode = "rotate";
+    state.selectionData = {
+      pivot: { x: cx, y: cy },
+      startAngle: Math.atan2(wp.y - cy, wp.x - cx),
+      originalShapes: snapshotSelected(),
+      historyPushed: false,
+    };
+  }
+
+  function applyMove(wp) {
+    let dx = wp.x - state.selectionData.startWorld.x;
+    let dy = wp.y - state.selectionData.startWorld.y;
+    const sd = snapDelta(dx, dy);
+    dx = sd.dx; dy = sd.dy;
+    const orig = state.selectionData.originalShapes;
+    forEachShape((sh) => {
+      const o = orig.get(sh.id);
+      if (!o) return;
+      SHAPES[sh.type].move(sh, o, dx, dy);
+    });
+  }
+
+  function applyResize(wp, e) {
+    const { handle, anchor, startBBox, originalShapes } = state.selectionData;
+    let scaleX = 1, scaleY = 1;
+
+    // Snap the cursor itself before deriving the scale so the dragged corner /
+    // edge always lands on a grid intersection. Anchor stays put (by definition
+    // it doesn't move during resize), so the moving side ends up at the snapped
+    // cursor position exactly.
+    const wpSnapped = state.snap ? snapWorld(wp) : wp;
+
+    const xActive = ["nw", "ne", "sw", "se", "e", "w"].includes(handle);
+    const yActive = ["nw", "ne", "sw", "se", "n", "s"].includes(handle);
+
+    if (xActive) {
+      const refX = handle.includes("e") ? startBBox.x2 : startBBox.x1;
+      const denom = refX - anchor.x;
+      if (Math.abs(denom) > 1e-6) scaleX = (wpSnapped.x - anchor.x) / denom;
+    }
+    if (yActive) {
+      const refY = handle.includes("s") ? startBBox.y2 : startBBox.y1;
+      const denom = refY - anchor.y;
+      if (Math.abs(denom) > 1e-6) scaleY = (wpSnapped.y - anchor.y) / denom;
+    }
+
+    const isCorner = ["nw", "ne", "sw", "se"].includes(handle);
+    if (e?.shiftKey && isCorner) {
+      const s = Math.max(Math.abs(scaleX), Math.abs(scaleY));
+      scaleX = (scaleX < 0 ? -1 : 1) * s;
+      scaleY = (scaleY < 0 ? -1 : 1) * s;
+    }
+
+    forEachShape((sh) => {
+      const o = originalShapes.get(sh.id);
+      if (!o) return;
+      SHAPES[sh.type].resize?.(sh, o, anchor, scaleX, scaleY);
+    });
+  }
+
+  function applyRotate(wp, e) {
+    const { pivot, startAngle, originalShapes } = state.selectionData;
+    let angle = Math.atan2(wp.y - pivot.y, wp.x - pivot.x) - startAngle;
+    if (e?.shiftKey) {
+      const step = Math.PI / 12; // 15° fine snap with Shift
+      angle = Math.round(angle / step) * step;
+    } else if (state.snap) {
+      const step = Math.PI / 4;  // 45° default snap when grid snap is on
+      angle = Math.round(angle / step) * step;
+    }
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const rot = (x, y) => ({
+      x: pivot.x + (x - pivot.x) * cos - (y - pivot.y) * sin,
+      y: pivot.y + (x - pivot.x) * sin + (y - pivot.y) * cos,
+    });
+    forEachShape((sh) => {
+      const o = originalShapes.get(sh.id);
+      if (!o) return;
+      SHAPES[sh.type].rotate(sh, o, rot, angle);
+    });
+  }
+
+  function ensureTransformHistory() {
+    if (!state.selectionData || state.selectionData.historyPushed) return;
+
+    // Curve drag: rewrite the captured shape back to its pre-drag form
+    if (state.selectionMode === "curve") {
+      const orig = state.selectionData.original;
+      const snap = snapshot();
+      if (orig) {
+        for (const story of snap.stories) {
+          for (const sub of story.sublayers) {
+            const idx = sub.shapes.findIndex((s) => s.id === orig.id);
+            if (idx >= 0) sub.shapes[idx] = { ...orig };
+          }
+        }
+      }
+      state.history.push(snap);
+      if (state.history.length > MAX_HISTORY) state.history.shift();
+      state.future.length = 0;
+      state.selectionData.historyPushed = true;
+      return;
+    }
+
+    const orig = state.selectionData.originalShapes;
+    const snap = orig ? snapshot() : null;
+    if (snap && orig) {
+      for (const story of snap.stories) {
+        for (const sub of story.sublayers) {
+          for (const sh of sub.shapes) {
+            const o = orig.get(sh.id);
+            if (o) SHAPES[sh.type].restore(sh, o);
+          }
+        }
+      }
+      state.history.push(snap);
+      if (state.history.length > MAX_HISTORY) state.history.shift();
+      state.future.length = 0;
+    }
+    state.selectionData.historyPushed = true;
+  }
+
+  // ---------- Select-tool pointer handling ----------
+  function handleSelectPointerDown(sp, e) {
+    const wp = screenToWorld(sp.x, sp.y);
+
+    // Curve handle on a single selected line/arc gets first dibs
+    const curveShape = curveHandleHitAt(sp);
+    if (curveShape) { startCurveDrag(curveShape); return; }
+
+    if (state.selection.size > 0) {
+      const bbox = selectionBBox();
+      if (bbox) {
+        const h = findHandleAtScreen(sp.x, sp.y, bbox);
+        if (h && h.startsWith("rotate")) { startRotate(wp, bbox); return; }
+        if (h) { startResize(h, bbox); return; }
+      }
+    }
+
+    const hit = findShapeAtScreen(sp.x, sp.y);
+    if (hit) {
+      if (e.shiftKey) {
+        if (state.selection.has(hit.id)) state.selection.delete(hit.id);
+        else state.selection.add(hit.id);
+      } else if (!state.selection.has(hit.id)) {
+        state.selection.clear();
+        state.selection.add(hit.id);
+      }
+      if (state.selection.size > 0) startMove(wp);
+      render();
+      return;
+    }
+
+    if (!e.shiftKey) state.selection.clear();
+    state.marquee = { x1: wp.x, y1: wp.y, x2: wp.x, y2: wp.y };
+    state.selectionMode = "marquee";
+    state.selectionData = { initialSelection: new Set(state.selection) };
+    render();
+  }
+
+  function handleSelectPointerMove(wp, e) {
+    if (state.selectionMode === "marquee") {
+      state.marquee.x2 = wp.x;
+      state.marquee.y2 = wp.y;
+      render();
+      return;
+    }
+    ensureTransformHistory();
+    if (state.selectionMode === "move") applyMove(wp);
+    else if (state.selectionMode === "resize") applyResize(wp, e);
+    else if (state.selectionMode === "rotate") applyRotate(wp, e);
+    else if (state.selectionMode === "curve") applyCurveDrag(wp);
+    render();
+  }
+
+  function finishSelectionAction() {
+    if (state.selectionMode === "curve") finishCurveDrag();
+    if (state.selectionMode === "marquee") {
+      const m = state.marquee;
+      const x1 = Math.min(m.x1, m.x2), x2 = Math.max(m.x1, m.x2);
+      const y1 = Math.min(m.y1, m.y2), y2 = Math.max(m.y1, m.y2);
+      const tinyTol = 2 / effectiveScale();
+      if ((x2 - x1) > tinyTol || (y2 - y1) > tinyTol) {
+        const newSel = new Set(state.selectionData.initialSelection);
+        forEachVisibleShape((sh) => {
+          const b = shapeBBox(sh);
+          if (b.x2 < x1 || b.x1 > x2 || b.y2 < y1 || b.y1 > y2) return;
+          newSel.add(sh.id);
+        });
+        state.selection = newSel;
+      }
+      state.marquee = null;
+    }
+    state.selectionMode = null;
+    state.selectionData = null;
+    render();
+  }
+
+  // ---------- Contextual curve drag ----------
+  function curveHandleHitAt(sp) {
+    const shape = curveHandleShape();
+    if (!shape) return null;
+    const p = curveHandlePoint(shape);
+    const sScreen = worldToScreen(p.x, p.y);
+    if (Math.hypot(sp.x - sScreen.x, sp.y - sScreen.y) <= HANDLE_HIT) return shape;
+    return null;
+  }
+
+  function startCurveDrag(shape) {
+    state.selectionMode = "curve";
+    state.selectionData = {
+      shapeId: shape.id,
+      original: { ...shape },
+      historyPushed: false,
+    };
+  }
+
+  function applyCurveDrag(wp) {
+    const data = state.selectionData;
+    const shape = findShapeById(data.shapeId);
+    if (!shape) return;
+    const p = snapWorld(wp);
+    if (shape.type === "line") shape.type = "arc";
+    shape.mx = p.x;
+    shape.my = p.y;
+  }
+
+  function finishCurveDrag() {
+    const data = state.selectionData;
+    const shape = data ? findShapeById(data.shapeId) : null;
+    if (shape && shape.type === "arc") {
+      const cross =
+        (shape.mx - shape.x1) * (shape.y2 - shape.y1) -
+        (shape.my - shape.y1) * (shape.x2 - shape.x1);
+      if (Math.abs(cross) < 1e-6) {
+        shape.type = "line";
+        delete shape.mx;
+        delete shape.my;
+      }
+    }
+  }
+
+  // ---------- Palette panel ----------
+  // Layer name -> { title, sections } where sections is an array of palette section keys.
+  const PALETTE_LAYERS = {
+    [WINDOW_DOOR_LAYER_NAME]: { title: "Windows & Doors", sections: ["doors", "windows"] },
+    [KITCHEN_LAYER_NAME]: {
+      title: "Kitchen",
+      sections: ["kitchen"],
+      tools: [
+        {
+          id: "cabinet-builder",
+          label: "Cabinet Builder Tool",
+          icon: '<svg viewBox="0 0 20 14" width="20" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="10" rx="1"/><line x1="2" y1="6" x2="18" y2="6"/><line x1="7" y1="6" x2="7" y2="12"/><line x1="13" y1="6" x2="13" y2="12"/></svg>',
+        },
+      ],
+    },
+  };
+  const PALETTE_SECTION_LABELS = {
+    doors:   "Doors",
+    windows: "Windows",
+    kitchen: "Appliances",
+  };
+
+  function paletteSpecForLayer(sub) {
+    if (!sub) return null;
+    return PALETTE_LAYERS[sub.name] || null;
+  }
+
+  function updatePaletteVisibility() {
+    const sub = activeSublayer();
+    const spec = paletteSpecForLayer(sub);
+    const showPalette = !!spec;
+    palettePanel.classList.toggle("hidden", !showPalette);
+    // Free up screen real estate for the palette by collapsing the layers panel
+    // to its header when a layer with a drag-and-drop palette is active.
+    layersPanel.classList.toggle("minimized", showPalette);
+    if (spec) {
+      const titleEl = palettePanel.querySelector(".palette-title");
+      if (titleEl) titleEl.textContent = spec.title;
+      renderPalette();
+      positionPaletteUnderLayers();
+    }
+    // Drawing tools are inert on palette layers — reflect that in the toolbar
+    // and bounce the active tool to select if it's no longer allowed.
+    updateToolButtonsForLayer();
+    if (LAYER_DRAW_TOOLS.has(state.tool) && isLayerDrawingBlocked()) {
+      setTool("select");
+    }
+  }
+
+  // Anchor the palette panel to the bottom edge of the layers panel so it never
+  // ends up clipping the layers, regardless of viewport size, drag position, or
+  // whether the layers panel is currently minimized.
+  function positionPaletteUnderLayers() {
+    const lLeft = layersPanel.offsetLeft;
+    const lTop = layersPanel.offsetTop;
+    const lWidth = layersPanel.offsetWidth;
+    const lHeight = layersPanel.offsetHeight;
+    const gap = 8;
+    palettePanel.style.left = lLeft + "px";
+    palettePanel.style.right = "auto";
+    palettePanel.style.top = (lTop + lHeight + gap) + "px";
+    palettePanel.style.width = lWidth + "px";
+  }
+
+  // Cabinet modal is normally a floating element under <main>. While the cabinet
+  // builder is active, we move it into the palette body so the user has the full
+  // canvas free for clicking nodes. We remember its original parent so we can
+  // put it back when the builder is done.
+  let cabinetModalHome = null;
+
+  function detachCabinetModalFromPalette() {
+    if (!cabinetModalHome) cabinetModalHome = cabinetModal.parentElement;
+    if (cabinetModal.parentElement === paletteBody) {
+      cabinetModalHome.appendChild(cabinetModal);
+    }
+    cabinetModal.classList.remove("in-palette");
+    cabinetModal.classList.add("hidden");
+  }
+
+  function attachCabinetModalToPalette() {
+    if (!cabinetModalHome) cabinetModalHome = cabinetModal.parentElement;
+    cabinetModal.classList.add("in-palette");
+    cabinetModal.classList.remove("hidden");
+    if (paletteBody.firstChild) paletteBody.insertBefore(cabinetModal, paletteBody.firstChild);
+    else paletteBody.appendChild(cabinetModal);
+  }
+
+  function renderPalette() {
+    // Detach the cabinet modal first so innerHTML clearing doesn't drop the
+    // element (it has its own listeners we want to preserve).
+    if (cabinetModal && cabinetModal.parentElement === paletteBody) {
+      detachCabinetModalFromPalette();
+    }
+
+    paletteBody.innerHTML = "";
+    const spec = paletteSpecForLayer(activeSublayer());
+    if (!spec) return;
+
+    // Tool buttons that live above the dropdown sections. While a tool's UI is
+    // active (e.g. cabinet builder), we replace its launcher button with the
+    // tool's own controls inline in the palette. When the tool finishes, the
+    // launcher button comes back automatically.
+    if (spec.tools) {
+      for (const tool of spec.tools) {
+        if (tool.id === "cabinet-builder" && state.cabinetBuilder) {
+          attachCabinetModalToPalette();
+          continue;
+        }
+        const btn = document.createElement("button");
+        btn.className = "palette-tool-btn";
+        btn.dataset.paletteTool = tool.id;
+        btn.innerHTML = `${tool.icon || ""}<span>${tool.label}</span>`;
+        paletteBody.appendChild(btn);
+      }
+    }
+
+    for (const sectionKey of spec.sections) {
+      const items = PALETTE_ITEMS[sectionKey];
+      if (!items) continue;
+      const section = document.createElement("div");
+      section.className = "palette-section" + (state.paletteExpanded[sectionKey] ? "" : " collapsed");
+      section.dataset.section = sectionKey;
+
+      const header = document.createElement("div");
+      header.className = "palette-section-header";
+      header.dataset.action = "toggle";
+      header.innerHTML = `${caretSvg()}<span>${PALETTE_SECTION_LABELS[sectionKey] || sectionKey}</span>`;
+      section.appendChild(header);
+
+      const content = document.createElement("div");
+      content.className = "palette-section-content";
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const itemEl = document.createElement("div");
+        itemEl.className = "palette-item";
+        itemEl.dataset.section = sectionKey;
+        itemEl.dataset.index = String(i);
+        const icon = document.createElement("div");
+        icon.className = "palette-item-icon";
+        icon.innerHTML = paletteIconSvg({
+          subtype: sectionKey === "windows" ? null : item.subtype,
+          kind: item.kind,
+        });
+        itemEl.appendChild(icon);
+        const name = document.createElement("span");
+        name.className = "palette-item-name";
+        name.textContent = item.name;
+        itemEl.appendChild(name);
+        content.appendChild(itemEl);
+      }
+
+      section.appendChild(content);
+      paletteBody.appendChild(section);
+    }
+  }
+
+  function clampPanel() {
+    const wrapRect = wrap.getBoundingClientRect();
+    for (const panel of [palettePanel, layersPanel]) {
+      if (!panel) continue;
+      const panelW = panel.offsetWidth;
+      const panelH = panel.offsetHeight;
+      const left = panel.offsetLeft;
+      const top = panel.offsetTop;
+      if (left + panelW > wrapRect.width) {
+        panel.style.left = Math.max(0, wrapRect.width - panelW) + "px";
+        panel.style.right = "auto";
+      }
+      if (top + panelH > wrapRect.height) {
+        panel.style.top = Math.max(0, wrapRect.height - panelH) + "px";
+      }
+    }
+  }
+
+  function bindFloatingPanelChrome(panel, header, minBtn, resizer) {
+    header.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button")) return;
+      const startX = e.clientX, startY = e.clientY;
+      const wrapRect = wrap.getBoundingClientRect();
+      const origLeft = panel.offsetLeft;
+      const origTop = panel.offsetTop;
+      const onMove = (ev) => {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        const newLeft = Math.max(0, Math.min(origLeft + dx, wrapRect.width - panel.offsetWidth));
+        const newTop = Math.max(0, Math.min(origTop + dy, wrapRect.height - panel.offsetHeight));
+        panel.style.left = newLeft + "px";
+        panel.style.top = newTop + "px";
+        panel.style.right = "auto";
+      };
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      e.preventDefault();
+    });
+
+    if (minBtn) {
+      minBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        panel.classList.toggle("minimized");
+      });
+    }
+
+    if (resizer) {
+      resizer.addEventListener("pointerdown", (e) => {
+        const startX = e.clientX, startY = e.clientY;
+        const origW = panel.offsetWidth;
+        const origH = panel.offsetHeight;
+        const wrapRect = wrap.getBoundingClientRect();
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX;
+          const dy = ev.clientY - startY;
+          const newW = Math.max(220, Math.min(origW + dx, wrapRect.width - panel.offsetLeft));
+          const newH = Math.max(120, Math.min(origH + dy, wrapRect.height - panel.offsetTop));
+          panel.style.width = newW + "px";
+          panel.style.height = newH + "px";
+        };
+        const onUp = () => {
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+        };
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    }
+  }
+
+  function bindLayersPanel() {
+    bindFloatingPanelChrome(layersPanel, layersHeader, layersMin, layersResize);
+
+    // Whenever the layers panel changes size or position (minimize toggle, manual
+    // resize, or drag), keep the palette tucked underneath so the layers panel
+    // can never end up obscured by it.
+    const reposition = () => {
+      if (palettePanel.classList.contains("hidden")) return;
+      positionPaletteUnderLayers();
+    };
+    layersMin.addEventListener("click", () => {
+      requestAnimationFrame(reposition);
+    });
+    if (typeof ResizeObserver !== "undefined") {
+      new ResizeObserver(reposition).observe(layersPanel);
+    }
+    new MutationObserver(reposition).observe(layersPanel, {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+  }
+
+  function bindPalettePanel() {
+    bindFloatingPanelChrome(palettePanel, paletteHeader, paletteMin, paletteResize);
+
+    // Section toggles + item drag-place
+    paletteBody.addEventListener("click", (e) => {
+      const toolBtn = e.target.closest(".palette-tool-btn");
+      if (toolBtn) {
+        const id = toolBtn.dataset.paletteTool;
+        if (id === "cabinet-builder") startCabinetBuilder();
+        return;
+      }
+      const sectionHeader = e.target.closest(".palette-section-header");
+      if (sectionHeader) {
+        const section = sectionHeader.parentElement;
+        const key = section.dataset.section;
+        state.paletteExpanded[key] = !state.paletteExpanded[key];
+        renderPalette();
+      }
+    });
+
+    paletteBody.addEventListener("pointerdown", (e) => {
+      const item = e.target.closest(".palette-item");
+      if (!item) return;
+      const sectionKey = item.dataset.section;
+      const index = parseInt(item.dataset.index, 10);
+      const def = PALETTE_ITEMS[sectionKey][index];
+      if (!def) return;
+
+      state.placing = { def, sectionKey };
+      wrap.classList.add("placing");
+      e.preventDefault();
+
+      const onMove = (ev) => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = ev.clientX - rect.left;
+        const sy = ev.clientY - rect.top;
+        state.cursorScreen = { x: sx, y: sy };
+        state.cursorWorld = screenToWorld(sx, sy);
+        render();
+      };
+      const onUp = (ev) => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        const rect = canvas.getBoundingClientRect();
+        const sx = ev.clientX - rect.left;
+        const sy = ev.clientY - rect.top;
+        const overCanvas = sx >= 0 && sx <= rect.width && sy >= 0 && sy <= rect.height;
+        if (overCanvas) placeItem(def, sectionKey, screenToWorld(sx, sy));
+        state.placing = null;
+        wrap.classList.remove("placing");
+        render();
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
+  }
+
+  function placeItem(def, sectionKey, worldPos) {
+    const layer = activeSublayer();
+    if (!layer) return;
+
+    if (sectionKey === "kitchen") {
+      let x, y, angle;
+      const wallBack = def.kind === "island"
+        ? null
+        : detectWallBackedPosition(worldPos, def.width, def.depth, applianceWallGap(def.kind));
+      if (wallBack) {
+        x = wallBack.x; y = wallBack.y; angle = wallBack.angle;
+      } else {
+        const pos = snapWorldHalf(worldPos);
+        x = pos.x - def.width / 2;
+        y = pos.y - def.depth / 2;
+        angle = 0;
+      }
+      const shape = {
+        id: makeId("X"),
+        type: "appliance",
+        x, y,
+        width: def.width,
+        depth: def.depth,
+        angle,
+        kind: def.kind,
+        label: def.name,
+      };
+      pushHistory();
+      layer.shapes.push(shape);
+      state.selection.clear();
+      state.selection.add(shape.id);
+      return;
+    }
+
+    const aligned = detectAlignedPosition(worldPos, def.width);
+    const pos = aligned || snapWorldHalf(worldPos);
+    const angle = aligned ? aligned.angle : 0;
+    let shape;
+    if (sectionKey === "windows") {
+      shape = {
+        id: makeId("X"),
+        type: "window",
+        x: pos.x, y: pos.y,
+        width: def.width,
+        depth: DEFAULT_WINDOW_DEPTH_FT,
+        angle,
+        kind: def.name,
+      };
+    } else {
+      shape = {
+        id: makeId("X"),
+        type: "door",
+        x: pos.x, y: pos.y,
+        width: def.width,
+        angle,
+        swing: 1,
+        subtype: def.subtype || "swing",
+        kind: def.name,
+      };
+    }
+
+    // Detect walls this opening would land on (before pushing history)
+    const { wallsLayer, walls } = findWallsForOpening(shape);
+    let shouldCut = false;
+    if (walls.length > 0) {
+      shouldCut = confirm(`Cut the wall to fit ${def.name}?`);
+    }
+
+    pushHistory();
+    layer.shapes.push(shape);
+    state.selection.clear();
+    state.selection.add(shape.id);
+
+    if (shouldCut && wallsLayer) {
+      for (const wall of walls) cutWallForOpening(wallsLayer, wall, shape);
+    }
+  }
+
+  // ---------- Dimension modal ----------
+  function bindDimModal() {
+    dimWidthInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applyDimWidth();
+        dimWidthInput.blur();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        const id = dimWidthInput.dataset.shapeId;
+        const shape = id ? findShapeById(id) : null;
+        if (shape) dimWidthInput.value = formatFeet(shape.width);
+        dimWidthInput.blur();
+      }
+      e.stopPropagation();
+    });
+    dimWidthInput.addEventListener("blur", applyDimWidth);
+    dimModal.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+    doorFlipRow.addEventListener("click", (e) => {
+      const btn = e.target.closest(".flip-btn");
+      if (!btn) return;
+      applyDoorFlip(btn.dataset.flip);
+    });
+  }
+
+  function applyDoorFlip(type) {
+    const id = dimWidthInput.dataset.shapeId;
+    if (!id) return;
+    const shape = findShapeById(id);
+    if (!shape || shape.type !== "door") return;
+    pushHistory();
+    if (type === "hinge") {
+      // Swap which end is the hinge: move anchor to E, reverse direction, flip
+      // swing sign so the leaf stays on the same physical side.
+      const u = { x: Math.cos(shape.angle), y: Math.sin(shape.angle) };
+      shape.x += u.x * shape.width;
+      shape.y += u.y * shape.width;
+      shape.angle += Math.PI;
+      shape.swing = -(shape.swing || 1);
+    } else if (type === "swing") {
+      shape.swing = -(shape.swing || 1);
+    }
+    render();
+  }
+
+  function applyDimWidth() {
+    const id = dimWidthInput.dataset.shapeId;
+    if (!id) return;
+    const shape = findShapeById(id);
+    if (!shape) return;
+    let newWidth = parseFeet(dimWidthInput.value);
+    if (newWidth === null || newWidth <= 0) {
+      dimWidthInput.value = formatFeet(shape.width);
+      return;
+    }
+    // When grid snap is on, round width to a grid multiple so both edges of the
+    // opening can land on grid intersections.
+    if (state.snap) {
+      const g = state.gridSize;
+      newWidth = Math.max(g, Math.round(newWidth / g) * g);
+    }
+    if (Math.abs(newWidth - shape.width) < 1e-6) {
+      dimWidthInput.value = formatFeet(shape.width);
+      return;
+    }
+    pushHistory();
+    shape.width = newWidth;
+    dimWidthInput.value = formatFeet(shape.width);
+    render();
+  }
+
+  function updateDimModal() {
+    if (state.tool !== "select" || state.selection.size !== 1) {
+      dimModal.classList.add("hidden");
+      return;
+    }
+    let shape = null;
+    for (const id of state.selection) shape = findShapeById(id);
+    if (!shape || (shape.type !== "door" && shape.type !== "window")) {
+      dimModal.classList.add("hidden");
+      return;
+    }
+
+    const bbox = shapeBBox(shape);
+    const tl = worldToScreen(bbox.x1, bbox.y1);
+    const br = worldToScreen(bbox.x2, bbox.y2);
+    const cx = (tl.x + br.x) / 2;
+
+    dimModal.classList.remove("hidden");
+    const modalW = dimModal.offsetWidth || 220;
+    const modalH = dimModal.offsetHeight || 60;
+    const view = viewSize();
+    let left = cx - modalW / 2;
+    let top = tl.y - modalH - 10;
+    if (top < 8) top = br.y + 10;
+    left = Math.max(8, Math.min(left, view.w - modalW - 8));
+    dimModal.style.left = left + "px";
+    dimModal.style.top = top + "px";
+
+    if (document.activeElement !== dimWidthInput) {
+      dimWidthInput.value = formatFeet(shape.width);
+      dimWidthInput.dataset.shapeId = shape.id;
+    } else if (dimWidthInput.dataset.shapeId !== shape.id) {
+      dimWidthInput.value = formatFeet(shape.width);
+      dimWidthInput.dataset.shapeId = shape.id;
+    }
+
+    doorFlipRow.classList.toggle("hidden", shape.type !== "door");
+  }
+
+  // ---------- Line stroke modal ----------
+  function bindLineModal() {
+    lineModalEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".stroke-btn");
+      if (!btn) return;
+      const id = lineModalEl.dataset.shapeId;
+      const shape = id ? findShapeById(id) : null;
+      if (!shape) return;
+      const newStroke = btn.dataset.stroke;
+      const cur = shape.stroke || "solid";
+      if (cur === newStroke) return;
+      pushHistory();
+      if (newStroke === "solid") delete shape.stroke;
+      else shape.stroke = newStroke;
+      render();
+    });
+    lineModalEl.addEventListener("pointerdown", (e) => e.stopPropagation());
+  }
+
+  function updateLineModal() {
+    if (state.tool !== "select" || state.selection.size !== 1) {
+      lineModalEl.classList.add("hidden");
+      return;
+    }
+    let shape = null;
+    for (const id of state.selection) shape = findShapeById(id);
+    if (!shape || (shape.type !== "line" && shape.type !== "arc")) {
+      lineModalEl.classList.add("hidden");
+      return;
+    }
+    if (state.selectionMode) { lineModalEl.classList.add("hidden"); return; }
+
+    const bbox = shapeBBox(shape);
+    const tl = worldToScreen(bbox.x1, bbox.y1);
+    const br = worldToScreen(bbox.x2, bbox.y2);
+    const cx = (tl.x + br.x) / 2;
+
+    lineModalEl.classList.remove("hidden");
+    const modalW = lineModalEl.offsetWidth || 200;
+    const modalH = lineModalEl.offsetHeight || 50;
+    const view = viewSize();
+    let left = cx - modalW / 2;
+    let top = tl.y - modalH - 10;
+    if (top < 8) top = br.y + 10;
+    left = Math.max(8, Math.min(left, view.w - modalW - 8));
+    lineModalEl.style.left = left + "px";
+    lineModalEl.style.top = top + "px";
+
+    const stroke = shape.stroke || "solid";
+    for (const btn of lineModalEl.querySelectorAll(".stroke-btn")) {
+      btn.classList.toggle("active", btn.dataset.stroke === stroke);
+    }
+    lineModalEl.dataset.shapeId = shape.id;
+  }
+
+  // ---------- Text modal (edit selected text) ----------
+  function bindTextModal() {
+    textContentInput.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); applyTextContent(); textContentInput.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); textContentInput.blur(); }
+    });
+    textContentInput.addEventListener("blur", applyTextContent);
+
+    textSizeInput.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); applyTextSize(); textSizeInput.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); textSizeInput.blur(); }
+    });
+    textSizeInput.addEventListener("blur", applyTextSize);
+
+    textFontSelect.addEventListener("change", () => {
+      const id = textModalEl.dataset.shapeId;
+      const shape = id ? findShapeById(id) : null;
+      if (!shape) return;
+      pushHistory();
+      shape.fontFamily = textFontSelect.value;
+      render();
+    });
+
+    textOutlineSelect.addEventListener("change", () => {
+      const id = textModalEl.dataset.shapeId;
+      const shape = id ? findShapeById(id) : null;
+      if (!shape) return;
+      pushHistory();
+      shape.outline = textOutlineSelect.value;
+      render();
+    });
+
+    textModalEl.addEventListener("pointerdown", (e) => e.stopPropagation());
+  }
+
+  function applyTextContent() {
+    const id = textModalEl.dataset.shapeId;
+    const shape = id ? findShapeById(id) : null;
+    if (!shape) return;
+    const newText = textContentInput.value;
+    if (newText === shape.text) return;
+    pushHistory();
+    shape.text = newText;
+    render();
+  }
+
+  function applyTextSize() {
+    const id = textModalEl.dataset.shapeId;
+    const shape = id ? findShapeById(id) : null;
+    if (!shape) return;
+    const parsed = parseFeet(textSizeInput.value);
+    if (parsed === null || parsed <= 0) {
+      textSizeInput.value = formatFeet(shape.fontSize);
+      return;
+    }
+    if (Math.abs(parsed - shape.fontSize) < 1e-6) return;
+    pushHistory();
+    shape.fontSize = parsed;
+    textSizeInput.value = formatFeet(shape.fontSize);
+    render();
+  }
+
+  function updateTextModal() {
+    if (state.tool !== "select" || state.selection.size !== 1) {
+      textModalEl.classList.add("hidden");
+      return;
+    }
+    let shape = null;
+    for (const id of state.selection) shape = findShapeById(id);
+    if (!shape || shape.type !== "text") {
+      textModalEl.classList.add("hidden");
+      return;
+    }
+    if (state.selectionMode) { textModalEl.classList.add("hidden"); return; }
+
+    const bbox = shapeBBox(shape);
+    const tl = worldToScreen(bbox.x1, bbox.y1);
+    const br = worldToScreen(bbox.x2, bbox.y2);
+    const cx = (tl.x + br.x) / 2;
+
+    textModalEl.classList.remove("hidden");
+    const modalW = textModalEl.offsetWidth || 240;
+    const modalH = textModalEl.offsetHeight || 160;
+    const view = viewSize();
+    let left = cx - modalW / 2;
+    let top = tl.y - modalH - 10;
+    if (top < 8) top = br.y + 10;
+    left = Math.max(8, Math.min(left, view.w - modalW - 8));
+    textModalEl.style.left = left + "px";
+    textModalEl.style.top = top + "px";
+
+    if (textModalEl.dataset.shapeId !== shape.id) {
+      textModalEl.dataset.shapeId = shape.id;
+      if (document.activeElement !== textContentInput) textContentInput.value = shape.text;
+      if (document.activeElement !== textSizeInput) textSizeInput.value = formatFeet(shape.fontSize);
+      let matched = false;
+      for (const opt of textFontSelect.options) {
+        if (opt.value === shape.fontFamily) { textFontSelect.value = opt.value; matched = true; break; }
+      }
+      if (!matched) textFontSelect.value = textFontSelect.options[0].value;
+      textOutlineSelect.value = shape.outline || "none";
+    }
+  }
+
+  // ---------- Inline text editor (placement) ----------
+  function bindTextInlineEditor() {
+    textInlineEditor.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); commitTextInline(); }
+      else if (e.key === "Escape") { e.preventDefault(); cancelTextInline(); }
+    });
+    textInlineEditor.addEventListener("blur", () => {
+      if (state.textPending) commitTextInline();
+    });
+    textInlineEditor.addEventListener("pointerdown", (e) => e.stopPropagation());
+  }
+
+  function showTextInlineEditor(screenPos, worldPos) {
+    state.textPending = { x: worldPos.x, y: worldPos.y };
+    textInlineEditor.value = "";
+    textInlineEditor.classList.remove("hidden");
+    const sizePx = Math.max(12, DEFAULT_TEXT_SIZE_FT * effectiveScale());
+    textInlineEditor.style.left = screenPos.x + "px";
+    textInlineEditor.style.top = screenPos.y + "px";
+    textInlineEditor.style.fontSize = sizePx + "px";
+    textInlineEditor.style.fontFamily = DEFAULT_TEXT_FONT_FAMILY;
+    setTimeout(() => textInlineEditor.focus(), 0);
+  }
+
+  function commitTextInline() {
+    if (!state.textPending) return;
+    const text = textInlineEditor.value.trim();
+    const pending = state.textPending;
+    state.textPending = null;
+    textInlineEditor.classList.add("hidden");
+    if (text) {
+      const layer = activeSublayer();
+      if (layer) {
+        pushHistory();
+        const shape = {
+          id: makeId("X"),
+          type: "text",
+          x: pending.x,
+          y: pending.y,
+          text,
+          fontSize: DEFAULT_TEXT_SIZE_FT,
+          fontFamily: DEFAULT_TEXT_FONT_FAMILY,
+          outline: "none",
+          angle: 0,
+        };
+        layer.shapes.push(shape);
+      }
+    }
+    render();
+  }
+
+  function cancelTextInline() {
+    state.textPending = null;
+    textInlineEditor.classList.add("hidden");
+    textInlineEditor.value = "";
+    render();
+  }
+
+  // ---------- Wall cut helpers (when a door/window is dropped on a wall line) ----------
+  function projectParam(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return 0;
+    return ((px - ax) * dx + (py - ay) * dy) / len2;
+  }
+
+  function findWallsForOpening(opening) {
+    const story = activeStory();
+    if (!story) return { wallsLayer: null, walls: [] };
+    const wallsLayer = story.sublayers.find((l) => l.name === WALL_LAYER_NAME);
+    if (!wallsLayer) return { wallsLayer: null, walls: [] };
+
+    const u = { x: Math.cos(opening.angle), y: Math.sin(opening.angle) };
+    const Hx = opening.x, Hy = opening.y;
+    const Ex = opening.x + u.x * opening.width;
+    const Ey = opening.y + u.y * opening.width;
+
+    const walls = [];
+    for (const line of wallsLayer.shapes) {
+      if (line.type !== "line") continue;
+      const dH = pointToSegmentDist(Hx, Hy, line.x1, line.y1, line.x2, line.y2);
+      const dE = pointToSegmentDist(Ex, Ey, line.x1, line.y1, line.x2, line.y2);
+      if (dH > WALL_CUT_TOL_FT || dE > WALL_CUT_TOL_FT) continue;
+      const tH = projectParam(Hx, Hy, line.x1, line.y1, line.x2, line.y2);
+      const tE = projectParam(Ex, Ey, line.x1, line.y1, line.x2, line.y2);
+      if (tH < -1e-6 || tH > 1 + 1e-6) continue;
+      if (tE < -1e-6 || tE > 1 + 1e-6) continue;
+      walls.push(line);
+    }
+    return { wallsLayer, walls };
+  }
+
+  // Find the nearest wall to a cursor position and return a placement {x, y, angle}
+  // for an opening of the given width that is centered on the projection onto that
+  // wall. Returns null if no wall is within ALIGN_TOL_FT.
+  // Snap a world point to the half-grid, then project the snapped point back
+  // onto the given wall so the result still lies on the wall line. For
+  // axis-aligned walls this is exact grid placement; for diagonal walls it's
+  // the foot-of-perpendicular from the nearest grid intersection. Falls back
+  // to the original point when grid snap is off.
+  function snapAlongWall(px, py, wall) {
+    if (!state.snap) return { x: px, y: py };
+    const dx = wall.x2 - wall.x1, dy = wall.y2 - wall.y1;
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 1e-12) return { x: px, y: py };
+    const snapped = snapWorldHalf({ x: px, y: py });
+    let t = ((snapped.x - wall.x1) * dx + (snapped.y - wall.y1) * dy) / len2;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    return { x: wall.x1 + dx * t, y: wall.y1 + dy * t };
+  }
+
+  function detectAlignedPosition(worldPos, width) {
+    const story = activeStory();
+    if (!story) return null;
+    const wallsLayer = story.sublayers.find((l) => l.name === WALL_LAYER_NAME);
+    if (!wallsLayer || !wallsLayer.visible) return null;
+
+    const tol = 1.0; // ft — only auto-align if cursor is within 1' of a wall
+    let best = null;
+    for (const wall of wallsLayer.shapes) {
+      if (wall.type !== "line") continue;
+      const dx = wall.x2 - wall.x1;
+      const dy = wall.y2 - wall.y1;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-6) continue;
+      const t = projectParam(worldPos.x, worldPos.y, wall.x1, wall.y1, wall.x2, wall.y2);
+      if (t < -1e-6 || t > 1 + 1e-6) continue;
+      const px = wall.x1 + dx * t;
+      const py = wall.y1 + dy * t;
+      const dist = Math.hypot(worldPos.x - px, worldPos.y - py);
+      if (dist > tol) continue;
+      if (!best || dist < best.dist) {
+        const ux = dx / len, uy = dy / len;
+        best = { dist, px, py, ux, uy, wall, angle: Math.atan2(dy, dx) };
+      }
+    }
+    if (!best) return null;
+    // Snap the projection point along the wall to the grid so anchors land at
+    // clean dimensions instead of wherever the cursor happened to be.
+    const snappedOnWall = snapAlongWall(best.px, best.py, best.wall);
+    const halfW = width / 2;
+    return {
+      x: snappedOnWall.x - best.ux * halfW,
+      y: snappedOnWall.y - best.uy * halfW,
+      angle: best.angle,
+    };
+  }
+
+  // Per-kind air gap (in feet) between the back of an appliance and the wall.
+  // Built-ins sit flush; freestanding appliances get a small ventilation gap.
+  const APPLIANCE_WALL_GAP = {
+    fridge: 1 / 12,  // 1"
+    range:  1 / 12,  // 1"
+  };
+  function applianceWallGap(kind) {
+    return APPLIANCE_WALL_GAP[kind] || 0;
+  }
+
+  // Detect a wall-back placement for an appliance: rotates the appliance so its
+  // width spans along the wall and its back edge sits on (or just off, per
+  // air-gap) the wall, with depth extending into the room on the cursor's side.
+  // Returns { x, y, angle } anchor for the appliance's back-left corner, or null.
+  function detectWallBackedPosition(worldPos, width, depth, airGap) {
+    const story = activeStory();
+    if (!story) return null;
+    const wallsLayer = story.sublayers.find((l) => l.name === WALL_LAYER_NAME);
+    if (!wallsLayer || !wallsLayer.visible) return null;
+
+    const tol = Math.max(1.0, depth * 0.6); // ft — auto-snap range scales with appliance depth
+    let best = null;
+    for (const wall of wallsLayer.shapes) {
+      if (wall.type !== "line") continue;
+      const dx = wall.x2 - wall.x1, dy = wall.y2 - wall.y1;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-6) continue;
+      const t = projectParam(worldPos.x, worldPos.y, wall.x1, wall.y1, wall.x2, wall.y2);
+      if (t < -1e-6 || t > 1 + 1e-6) continue;
+      const px = wall.x1 + dx * t;
+      const py = wall.y1 + dy * t;
+      const dist = Math.hypot(worldPos.x - px, worldPos.y - py);
+      if (dist > tol) continue;
+      if (!best || dist < best.dist) {
+        best = { dist, px, py, ux: dx / len, uy: dy / len, wall };
+      }
+    }
+    if (!best) return null;
+
+    // Choose orientation so the appliance depth extends toward the cursor.
+    let ux = best.ux, uy = best.uy;
+    let nx = -uy, ny = ux;
+    const proj = (worldPos.x - best.px) * nx + (worldPos.y - best.py) * ny;
+    if (proj < 0) {
+      ux = -ux; uy = -uy;
+      nx = -nx; ny = -ny;
+    }
+
+    // Snap the projection along the wall so the back edge lands on grid
+    // measurements rather than at the cursor's pixel position.
+    const snappedOnWall = snapAlongWall(best.px, best.py, best.wall);
+
+    const halfW = width / 2;
+    return {
+      x: snappedOnWall.x - ux * halfW + nx * airGap,
+      y: snappedOnWall.y - uy * halfW + ny * airGap,
+      angle: Math.atan2(uy, ux),
+    };
+  }
+
+  function cutWallForOpening(layer, wall, opening) {
+    const u = { x: Math.cos(opening.angle), y: Math.sin(opening.angle) };
+    const Hx = opening.x, Hy = opening.y;
+    const Ex = opening.x + u.x * opening.width;
+    const Ey = opening.y + u.y * opening.width;
+
+    const tH = projectParam(Hx, Hy, wall.x1, wall.y1, wall.x2, wall.y2);
+    const tE = projectParam(Ex, Ey, wall.x1, wall.y1, wall.x2, wall.y2);
+    const tMin = Math.max(0, Math.min(tH, tE));
+    const tMax = Math.min(1, Math.max(tH, tE));
+
+    const wdx = wall.x2 - wall.x1;
+    const wdy = wall.y2 - wall.y1;
+    const cutMin = { x: wall.x1 + wdx * tMin, y: wall.y1 + wdy * tMin };
+    const cutMax = { x: wall.x1 + wdx * tMax, y: wall.y1 + wdy * tMax };
+
+    const idx = layer.shapes.indexOf(wall);
+    if (idx === -1) return;
+    layer.shapes.splice(idx, 1);
+
+    if (tMin > 0.001) {
+      layer.shapes.push({
+        ...wall,
+        id: makeId("X"),
+        x1: wall.x1, y1: wall.y1,
+        x2: cutMin.x, y2: cutMin.y,
+      });
+    }
+    if (tMax < 0.999) {
+      layer.shapes.push({
+        ...wall,
+        id: makeId("X"),
+        x1: cutMax.x, y1: cutMax.y,
+        x2: wall.x2, y2: wall.y2,
+      });
+    }
+  }
+
+  // ---------- Box tool: collinear-overlap merge ----------
+  // Two segments are considered collinear when both endpoints of B lie on the
+  // infinite line through A (perpendicular distance under tolPerp).
+  function segmentsCollinear(a1x, a1y, a2x, a2y, b1x, b1y, b2x, b2y) {
+    const dx = a2x - a1x, dy = a2y - a1y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-9) return false;
+    const tolPerp = 1e-3; // ft (~1/80 inch)
+    const c1 = ((b1x - a1x) * dy - (b1y - a1y) * dx) / len;
+    const c2 = ((b2x - a1x) * dy - (b2y - a1y) * dx) / len;
+    return Math.abs(c1) < tolPerp && Math.abs(c2) < tolPerp;
+  }
+
+  // Merge a candidate line into existing collinear+overlapping/touching lines on
+  // a given layer. Mutates layer (removes the absorbed segments) and returns the
+  // grown line geometry that should be pushed.
+  function mergeCollinearOverlap(layer, x1, y1, x2, y2) {
+    let cur = { x1, y1, x2, y2 };
+    let changed = true;
+    const tolEnd = 1e-3;
+    while (changed) {
+      changed = false;
+      for (let i = layer.shapes.length - 1; i >= 0; i--) {
+        const sh = layer.shapes[i];
+        if (sh.type !== "line") continue;
+        if (!segmentsCollinear(cur.x1, cur.y1, cur.x2, cur.y2, sh.x1, sh.y1, sh.x2, sh.y2)) continue;
+
+        const dx = cur.x2 - cur.x1, dy = cur.y2 - cur.y1;
+        const len = Math.hypot(dx, dy);
+        if (len < 1e-9) continue;
+        const ux = dx / len, uy = dy / len;
+        const tA1 = 0;
+        const tA2 = len;
+        const tB1 = (sh.x1 - cur.x1) * ux + (sh.y1 - cur.y1) * uy;
+        const tB2 = (sh.x2 - cur.x1) * ux + (sh.y2 - cur.y1) * uy;
+        const tBmin = Math.min(tB1, tB2);
+        const tBmax = Math.max(tB1, tB2);
+        if (tBmax < tA1 - tolEnd) continue;
+        if (tBmin > tA2 + tolEnd) continue;
+
+        const tMin = Math.min(tA1, tBmin);
+        const tMax = Math.max(tA2, tBmax);
+        cur = {
+          x1: cur.x1 + ux * tMin, y1: cur.y1 + uy * tMin,
+          x2: cur.x1 + ux * tMax, y2: cur.y1 + uy * tMax,
+        };
+        layer.shapes.splice(i, 1);
+        changed = true;
+      }
+    }
+    return cur;
+  }
+
+  function commitBox(layer, a, b) {
+    pushHistory();
+    const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x);
+    const y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
+    const sides = [
+      [x1, y1, x2, y1], // top
+      [x2, y1, x2, y2], // right
+      [x2, y2, x1, y2], // bottom
+      [x1, y2, x1, y1], // left
+    ];
+    state.selection.clear();
+    for (const [sx1, sy1, sx2, sy2] of sides) {
+      const merged = mergeCollinearOverlap(layer, sx1, sy1, sx2, sy2);
+      const id = makeId("X");
+      layer.shapes.push({
+        id,
+        type: "line",
+        x1: merged.x1, y1: merged.y1,
+        x2: merged.x2, y2: merged.y2,
+      });
+      state.selection.add(id);
+    }
+    renderLayerTree();
+  }
+
+  // ---------- Stairs ----------
+  // Ray from (ox, oy) in direction (dx, dy), length maxT, intersected with line segment [(ax,ay) - (bx,by)].
+  // Returns t (distance along ray) or null.
+  function raySegmentIntersection(ox, oy, dx, dy, maxT, ax, ay, bx, by) {
+    const sx = bx - ax;
+    const sy = by - ay;
+    const cross = dx * sy - dy * sx;
+    if (Math.abs(cross) < 1e-9) return null;
+    const px = ax - ox;
+    const py = ay - oy;
+    const t = (px * sy - py * sx) / cross;
+    const u = (px * dy - py * dx) / cross;
+    if (t < 0 || t > maxT) return null;
+    if (u < -1e-6 || u > 1 + 1e-6) return null;
+    return t;
+  }
+
+  function findWallHit(ox, oy, dx, dy, maxT) {
+    const story = activeStory();
+    if (!story) return null;
+    const wallsLayer = story.sublayers.find((l) => l.name === WALL_LAYER_NAME);
+    if (!wallsLayer || !wallsLayer.visible) return null;
+    let closest = null;
+    for (const wall of wallsLayer.shapes) {
+      if (wall.type !== "line") continue;
+      const t = raySegmentIntersection(ox, oy, dx, dy, maxT, wall.x1, wall.y1, wall.x2, wall.y2);
+      if (t !== null && t > 0.01 && (closest === null || t < closest.t)) {
+        closest = { t, wall };
+      }
+    }
+    return closest;
+  }
+
+  // If one side of the proposed stairs is within ~6" of a parallel wall, shift the
+  // start perpendicular so the side lands flush against it. Returns possibly-shifted start.
+  function snapStairsStartToWall(start, angle, width) {
+    const story = activeStory();
+    if (!story) return start;
+    const wallsLayer = story.sublayers.find((l) => l.name === WALL_LAYER_NAME);
+    if (!wallsLayer || !wallsLayer.visible) return start;
+
+    const u = { x: Math.cos(angle), y: Math.sin(angle) };
+    const n = { x: -u.y, y: u.x };
+    const halfW = width / 2;
+    const snapTol = 0.6; // ft (~7")
+    const parallelTol = 0.97; // |cosθ| threshold for "parallel"
+
+    let bestShift = 0;
+    let bestAbs = snapTol;
+
+    for (const wall of wallsLayer.shapes) {
+      if (wall.type !== "line") continue;
+      const wdx = wall.x2 - wall.x1;
+      const wdy = wall.y2 - wall.y1;
+      const wlen = Math.hypot(wdx, wdy);
+      if (wlen < 1e-6) continue;
+      const wux = wdx / wlen, wuy = wdy / wlen;
+      const dot = Math.abs(wux * u.x + wuy * u.y);
+      if (dot < parallelTol) continue;
+
+      // Perpendicular offset from start to the wall (signed in n direction)
+      const offN = (start.x - wall.x1) * n.x + (start.y - wall.y1) * n.y;
+
+      // Shift needed so a side (start + n*halfW or start - n*halfW) sits on the wall
+      const shiftS1 = -offN - halfW;   // align +n side
+      const shiftS2 = halfW - offN;    // align -n side
+
+      const cand = Math.abs(shiftS1) < Math.abs(shiftS2) ? shiftS1 : shiftS2;
+      if (Math.abs(cand) < bestAbs) {
+        bestAbs = Math.abs(cand);
+        bestShift = cand;
+      }
+    }
+
+    if (bestAbs >= snapTol) return start;
+    return { x: start.x + n.x * bestShift, y: start.y + n.y * bestShift };
+  }
+
+  function buildStairsSegments(start, angle, params) {
+    const { width, rise, run, ceilingHeight } = params;
+    const numSteps = Math.max(1, Math.ceil(ceilingHeight / rise));
+    const totalRun = numSteps * run;
+
+    const u = { x: Math.cos(angle), y: Math.sin(angle) };
+    const hit = findWallHit(start.x, start.y, u.x, u.y, totalRun + width);
+
+    if (!hit || hit.t >= totalRun) {
+      // Fits straight
+      return {
+        success: true,
+        numSteps,
+        segments: [{
+          type: "flight",
+          x1: start.x, y1: start.y,
+          x2: start.x + u.x * totalRun, y2: start.y + u.y * totalRun,
+          angle, width, run, steps: numSteps, stepStart: 1,
+        }],
+      };
+    }
+
+    // Wall ahead — fit landing before it
+    const landingSize = width;
+    const buffer = 0.25;
+    const stopBeforeWall = hit.t - landingSize - buffer;
+    if (stopBeforeWall < run) {
+      return { success: false, message: "Not enough space — wall is too close in this direction." };
+    }
+
+    const stepsFlight1 = Math.floor(stopBeforeWall / run);
+    if (stepsFlight1 < 1) {
+      return { success: false, message: "Not enough space for even one step before the wall." };
+    }
+
+    const flight1Length = stepsFlight1 * run;
+    const flight1End = { x: start.x + u.x * flight1Length, y: start.y + u.y * flight1Length };
+    const remainingSteps = numSteps - stepsFlight1;
+
+    if (remainingSteps <= 0) {
+      return {
+        success: true,
+        numSteps,
+        segments: [{
+          type: "flight",
+          x1: start.x, y1: start.y,
+          x2: flight1End.x, y2: flight1End.y,
+          angle, width, run, steps: stepsFlight1, stepStart: 1,
+        }],
+      };
+    }
+
+    // Pick a turn direction by checking sides at the landing center
+    const landingCenter = {
+      x: flight1End.x + u.x * landingSize / 2,
+      y: flight1End.y + u.y * landingSize / 2,
+    };
+    const leftPerp = { x: -u.y, y: u.x };
+    const rightPerp = { x: u.y, y: -u.x };
+    const sideCheckDist = width * 1.5;
+    const leftHit = findWallHit(landingCenter.x, landingCenter.y, leftPerp.x, leftPerp.y, sideCheckDist);
+    const rightHit = findWallHit(landingCenter.x, landingCenter.y, rightPerp.x, rightPerp.y, sideCheckDist);
+
+    let turnDir;
+    if (leftHit && rightHit) {
+      return { success: false, message: "Not enough space — walls block both sides at the landing." };
+    } else if (leftHit) {
+      turnDir = "right";
+    } else if (rightHit) {
+      turnDir = "left";
+    } else {
+      const choice = prompt("Both sides are open at the landing. Turn LEFT or RIGHT?", "left");
+      if (!choice) return { success: false, message: "Cancelled." };
+      turnDir = choice.trim().toLowerCase().startsWith("r") ? "right" : "left";
+    }
+
+    const newU = turnDir === "left" ? leftPerp : rightPerp;
+    const newAngle = Math.atan2(newU.y, newU.x);
+    const flight2Start = {
+      x: landingCenter.x + newU.x * landingSize / 2,
+      y: landingCenter.y + newU.y * landingSize / 2,
+    };
+    const flight2Length = remainingSteps * run;
+    const flight2Hit = findWallHit(flight2Start.x, flight2Start.y, newU.x, newU.y, flight2Length);
+    if (flight2Hit && flight2Hit.t < flight2Length) {
+      return {
+        success: false,
+        message: `Not enough space for the second flight (need ${formatFeet(flight2Length)}, only ${formatFeet(flight2Hit.t)} clear).`,
+      };
+    }
+    const flight2End = {
+      x: flight2Start.x + newU.x * flight2Length,
+      y: flight2Start.y + newU.y * flight2Length,
+    };
+
+    return {
+      success: true,
+      turnDir,
+      numSteps,
+      segments: [
+        { type: "flight", x1: start.x, y1: start.y, x2: flight1End.x, y2: flight1End.y, angle, width, run, steps: stepsFlight1, stepStart: 1 },
+        { type: "landing", x: landingCenter.x, y: landingCenter.y, angle, width },
+        { type: "flight", x1: flight2Start.x, y1: flight2Start.y, x2: flight2End.x, y2: flight2End.y, angle: newAngle, width, run, steps: remainingSteps, stepStart: stepsFlight1 + 1 },
+      ],
+    };
+  }
+
+  function drawStairsFlight(seg) {
+    const u = { x: Math.cos(seg.angle), y: Math.sin(seg.angle) };
+    const p = { x: -u.y, y: u.x };
+    const halfW = seg.width / 2;
+
+    const c1 = { x: seg.x1 + p.x * halfW, y: seg.y1 + p.y * halfW };
+    const c2 = { x: seg.x1 - p.x * halfW, y: seg.y1 - p.y * halfW };
+    const c3 = { x: seg.x2 - p.x * halfW, y: seg.y2 - p.y * halfW };
+    const c4 = { x: seg.x2 + p.x * halfW, y: seg.y2 + p.y * halfW };
+
+    const sc1 = worldToScreen(c1.x, c1.y);
+    const sc2 = worldToScreen(c2.x, c2.y);
+    const sc3 = worldToScreen(c3.x, c3.y);
+    const sc4 = worldToScreen(c4.x, c4.y);
+
+    ctx.beginPath();
+    ctx.moveTo(sc1.x, sc1.y); ctx.lineTo(sc4.x, sc4.y); // far rail
+    ctx.moveTo(sc2.x, sc2.y); ctx.lineTo(sc3.x, sc3.y); // near rail
+    ctx.moveTo(sc1.x, sc1.y); ctx.lineTo(sc2.x, sc2.y); // start cap
+    ctx.moveTo(sc3.x, sc3.y); ctx.lineTo(sc4.x, sc4.y); // end cap
+    ctx.stroke();
+
+    // Step lines (riser lines) at each run interval
+    ctx.beginPath();
+    for (let i = 1; i < seg.steps; i++) {
+      const d = i * seg.run;
+      const cxw = seg.x1 + u.x * d;
+      const cyw = seg.y1 + u.y * d;
+      const sl = worldToScreen(cxw + p.x * halfW, cyw + p.y * halfW);
+      const sr = worldToScreen(cxw - p.x * halfW, cyw - p.y * halfW);
+      ctx.moveTo(sl.x, sl.y);
+      ctx.lineTo(sr.x, sr.y);
+    }
+    ctx.stroke();
+  }
+
+  function drawStairsLanding(seg) {
+    const u = { x: Math.cos(seg.angle), y: Math.sin(seg.angle) };
+    const p = { x: -u.y, y: u.x };
+    const halfW = seg.width / 2;
+
+    const c1 = { x: seg.x - u.x * halfW + p.x * halfW, y: seg.y - u.y * halfW + p.y * halfW };
+    const c2 = { x: seg.x - u.x * halfW - p.x * halfW, y: seg.y - u.y * halfW - p.y * halfW };
+    const c3 = { x: seg.x + u.x * halfW - p.x * halfW, y: seg.y + u.y * halfW - p.y * halfW };
+    const c4 = { x: seg.x + u.x * halfW + p.x * halfW, y: seg.y + u.y * halfW + p.y * halfW };
+
+    const sc1 = worldToScreen(c1.x, c1.y);
+    const sc2 = worldToScreen(c2.x, c2.y);
+    const sc3 = worldToScreen(c3.x, c3.y);
+    const sc4 = worldToScreen(c4.x, c4.y);
+
+    ctx.beginPath();
+    ctx.moveTo(sc1.x, sc1.y);
+    ctx.lineTo(sc2.x, sc2.y);
+    ctx.lineTo(sc3.x, sc3.y);
+    ctx.lineTo(sc4.x, sc4.y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  function drawStairsUpArrow(sh, color) {
+    const first = sh.segments[0];
+    if (!first || first.type !== "flight") return;
+    const u = { x: Math.cos(first.angle), y: Math.sin(first.angle) };
+    const startScreen = worldToScreen(first.x1, first.y1);
+    const tipWorld = { x: first.x1 + u.x * first.width * 0.55, y: first.y1 + u.y * first.width * 0.55 };
+    const tip = worldToScreen(tipWorld.x, tipWorld.y);
+
+    ctx.save();
+    ctx.strokeStyle = color || SHAPE_COLOR;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(startScreen.x, startScreen.y);
+    ctx.lineTo(tip.x, tip.y);
+    const dx = tip.x - startScreen.x, dy = tip.y - startScreen.y;
+    const len = Math.hypot(dx, dy);
+    if (len > 0.001) {
+      const ux = dx / len, uy = dy / len;
+      const px = -uy, py = ux;
+      const headLen = 8, headW = 4;
+      ctx.moveTo(tip.x - ux * headLen + px * headW, tip.y - uy * headLen + py * headW);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.lineTo(tip.x - ux * headLen - px * headW, tip.y - uy * headLen - py * headW);
+    }
+    ctx.stroke();
+
+    // "UP" label
+    ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillStyle = color || SHAPE_COLOR;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.fillText("UP", tip.x + 6, tip.y);
+    ctx.restore();
+  }
+
+  function drawStairsShape(sh, color) {
+    ctx.save();
+    ctx.strokeStyle = color || SHAPE_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const seg of sh.segments) {
+      if (seg.type === "flight") drawStairsFlight(seg);
+      else if (seg.type === "landing") drawStairsLanding(seg);
+    }
+    ctx.restore();
+    drawStairsUpArrow(sh, color);
+  }
+
+  function getStairsArrowEnd() {
+    const start = state.stairsDirection.start;
+    const cursor = state.cursorWorld;
+    if (!state.snap && !state.shiftDown) return cursor;
+    const dx = cursor.x - start.x;
+    const dy = cursor.y - start.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) return cursor;
+    const angle = Math.atan2(dy, dx);
+    const step = Math.PI / 4;
+    const snappedAngle = Math.round(angle / step) * step;
+    let snappedLen = len;
+    if (state.snap) {
+      snappedLen = Math.max(state.gridSize, Math.round(len / state.gridSize) * state.gridSize);
+    }
+    return {
+      x: start.x + Math.cos(snappedAngle) * snappedLen,
+      y: start.y + Math.sin(snappedAngle) * snappedLen,
+    };
+  }
+
+  function drawStairsGhost() {
+    if (!state.stairsDirection) return;
+    const start = state.stairsDirection.start;
+    let endWorld;
+    if (state.stairsDirection.angle != null) {
+      // Direction has been committed (modal is open) — render a frozen arrow
+      const len = state.stairsDirection.length || (state.gridSize * 3);
+      endWorld = {
+        x: start.x + Math.cos(state.stairsDirection.angle) * len,
+        y: start.y + Math.sin(state.stairsDirection.angle) * len,
+      };
+    } else {
+      endWorld = getStairsArrowEnd();
+    }
+    const a = worldToScreen(start.x, start.y);
+    const b = worldToScreen(endWorld.x, endWorld.y);
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(45, 78, 224, 0.85)";
+    ctx.fillStyle = "rgba(45, 78, 224, 0.85)";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len > 6) {
+      const ux = dx / len, uy = dy / len;
+      const px = -uy, py = ux;
+      const headLen = 14, headW = 7;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.x - ux * headLen + px * headW, b.y - uy * headLen + py * headW);
+      ctx.lineTo(b.x - ux * headLen - px * headW, b.y - uy * headLen - py * headW);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Origin dot
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(45, 78, 224, 0.95)";
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // ---------- Cabinet builder preview ----------
+  function drawCabinetPreview() {
+    const cb = state.cabinetBuilder;
+    if (!cb) return;
+    const points = cb.points.slice();
+    if (points.length === 0) return;
+
+    // Add a "phantom" final node at the snapped cursor so the user sees the
+    // segment they're about to commit. We only add it if the cursor is actually
+    // over the canvas (not over the modal).
+    const cursorOverCanvas = isCursorOverCanvas();
+    if (cursorOverCanvas) {
+      const last = points[points.length - 1];
+      const next = snapAngleTo45(last, state.cursorWorld);
+      if (next.len > 0) points.push({ x: next.x, y: next.y });
+    }
+
+    if (points.length >= 2) {
+      drawCabinetPath(points, cb.depth, cb.side, MEASURE_COLOR, 0.55, cb.layerId);
+    }
+
+    // Node dots so each committed corner is visible.
+    ctx.save();
+    ctx.fillStyle = "rgba(45, 78, 224, 0.95)";
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < cb.points.length; i++) {
+      const p = worldToScreen(cb.points[i].x, cb.points[i].y);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Length label on the in-progress segment.
+    if (cursorOverCanvas && points.length >= 2) {
+      const last = points[points.length - 1];
+      const prev = points[points.length - 2];
+      const lenFt = Math.hypot(last.x - prev.x, last.y - prev.y);
+      if (lenFt > 0) {
+        const sp = worldToScreen(last.x, last.y);
+        drawCursorLabel(formatFeet(lenFt), sp, "rgba(45, 78, 224, 0.95)");
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // The cabinet modal sits on top of the canvas — clicks on it shouldn't add
+  // nodes. Detect whether the cursor is currently over the canvas region only.
+  function isCursorOverCanvas() {
+    if (!state.cursorScreen) return false;
+    const view = viewSize();
+    const sp = state.cursorScreen;
+    if (sp.x < 0 || sp.x > view.w || sp.y < 0 || sp.y > view.h) return false;
+    if (cabinetModal.classList.contains("hidden")) return true;
+    const rect = cabinetModal.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const sxAbs = sp.x + canvasRect.left;
+    const syAbs = sp.y + canvasRect.top;
+    if (sxAbs >= rect.left && sxAbs <= rect.right && syAbs >= rect.top && syAbs <= rect.bottom) {
+      return false;
+    }
+    return true;
+  }
+
+  // ---------- Stairs modal ----------
+  function bindStairsModal() {
+    stairsCancelBtn.addEventListener("click", cancelStairs);
+    stairsBuildBtn.addEventListener("click", buildAndPlaceStairs);
+    for (const inp of [stairsCeilingInput, stairsRiseInput, stairsRunInput, stairsWidthInput]) {
+      inp.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") { e.preventDefault(); buildAndPlaceStairs(); }
+        else if (e.key === "Escape") { e.preventDefault(); cancelStairs(); }
+      });
+    }
+    stairsModal.addEventListener("pointerdown", (e) => e.stopPropagation());
+  }
+
+  function showStairsModal() {
+    stairsCeilingInput.value = formatFeet(DEFAULT_STAIRS_CEILING_FT);
+    stairsRiseInput.value = formatFeet(DEFAULT_STAIRS_RISE_FT);
+    stairsRunInput.value = formatFeet(DEFAULT_STAIRS_RUN_FT);
+    stairsWidthInput.value = formatFeet(DEFAULT_STAIRS_WIDTH_FT);
+    stairsModal.classList.remove("hidden");
+    setTimeout(() => stairsCeilingInput.focus(), 0);
+  }
+
+  function hideStairsModal() {
+    stairsModal.classList.add("hidden");
+  }
+
+  function cancelStairs() {
+    state.stairsDirection = null;
+    hideStairsModal();
+    render();
+  }
+
+  function buildAndPlaceStairs() {
+    if (!state.stairsDirection) { hideStairsModal(); return; }
+
+    const ceiling = parseFeet(stairsCeilingInput.value);
+    const rise = parseFeet(stairsRiseInput.value);
+    const run = parseFeet(stairsRunInput.value);
+    const width = parseFeet(stairsWidthInput.value);
+
+    if (!ceiling || !rise || !run || !width || ceiling <= 0 || rise <= 0 || run <= 0 || width <= 0) {
+      alert("Please provide valid values for all fields.");
+      return;
+    }
+
+    const { start: rawStart, angle } = state.stairsDirection;
+    const start = snapStairsStartToWall(rawStart, angle, width);
+    const result = buildStairsSegments(start, angle, { width, rise, run, ceilingHeight: ceiling });
+
+    if (!result.success) {
+      alert(result.message);
+      return;
+    }
+
+    const layer = activeSublayer();
+    if (!layer) { alert("No active layer to place stairs on."); return; }
+
+    pushHistory();
+    const shape = {
+      id: makeId("X"),
+      type: "stairs",
+      x: start.x,
+      y: start.y,
+      angle,
+      width,
+      rise,
+      run,
+      ceilingHeight: ceiling,
+      segments: result.segments,
+      turnDir: result.turnDir || null,
+      stepCount: result.numSteps,
+    };
+    layer.shapes.push(shape);
+    state.selection.clear();
+    state.selection.add(shape.id);
+
+    state.stairsDirection = null;
+    hideStairsModal();
+    render();
+  }
+
+  // ---------- Cabinet builder ----------
+  function bindCabinetModal() {
+    cabinetCancelBtn.addEventListener("click", cancelCabinetBuilder);
+    cabinetFinishBtn.addEventListener("click", finishCabinetBuilder);
+
+    cabinetDepthInput.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") { e.preventDefault(); applyCabinetDepthInput(); cabinetDepthInput.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); cabinetDepthInput.blur(); }
+    });
+    cabinetDepthInput.addEventListener("blur", applyCabinetDepthInput);
+
+    for (const btn of cabinetModal.querySelectorAll(".cabinet-side-btn")) {
+      btn.addEventListener("click", () => {
+        const side = parseInt(btn.dataset.side, 10);
+        for (const b of cabinetModal.querySelectorAll(".cabinet-side-btn")) {
+          b.classList.toggle("active", b === btn);
+        }
+        if (state.cabinetBuilder) {
+          state.cabinetBuilder.side = side;
+          render();
+        }
+      });
+    }
+
+    // Swallow pointerdowns on the modal so clicks on "Finish" / inputs never
+    // also register as a cabinet-builder canvas click.
+    cabinetModal.addEventListener("pointerdown", (e) => e.stopPropagation());
+  }
+
+  function applyCabinetDepthInput() {
+    if (!state.cabinetBuilder) return;
+    const v = parseFeet(cabinetDepthInput.value);
+    if (v && v > 0) {
+      state.cabinetBuilder.depth = v;
+      cabinetDepthInput.value = formatFeet(v);
+      render();
+    } else {
+      cabinetDepthInput.value = formatFeet(state.cabinetBuilder.depth);
+    }
+  }
+
+  function startCabinetBuilder() {
+    const layer = activeSublayer();
+    if (!layer) { alert("Select a layer to build cabinets on."); return; }
+    const story = activeStory();
+    if (!story) return;
+
+    state.cabinetBuilder = {
+      points: [],
+      depth: DEFAULT_CABINET_DEPTH_FT,
+      side: 1,
+      layerId: layer.id,
+      storyId: story.id,
+    };
+    setTool("cabinet");
+    cabinetDepthInput.value = formatFeet(DEFAULT_CABINET_DEPTH_FT);
+    for (const b of cabinetModal.querySelectorAll(".cabinet-side-btn")) {
+      b.classList.toggle("active", parseInt(b.dataset.side, 10) === 1);
+    }
+    // Re-render the palette so the launcher button is replaced by the inline
+    // builder UI (the modal element gets moved into the palette body).
+    renderPalette();
+    render();
+  }
+
+  function cancelCabinetBuilder() {
+    state.cabinetBuilder = null;
+    detachCabinetModalFromPalette();
+    renderPalette(); // bring the launcher button back
+    if (state.tool === "cabinet") setTool("select");
+    render();
+  }
+
+  function finishCabinetBuilder() {
+    if (!state.cabinetBuilder) { detachCabinetModalFromPalette(); return; }
+    const cb = state.cabinetBuilder;
+    if (cb.points.length >= 2) commitCabinet(cb);
+    state.cabinetBuilder = null;
+    detachCabinetModalFromPalette();
+    renderPalette();
+    if (state.tool === "cabinet") setTool("select");
+    render();
+  }
+
+  function commitCabinet(cb) {
+    let layer = null;
+    for (const story of state.stories) {
+      const found = story.sublayers.find((l) => l.id === cb.layerId);
+      if (found) { layer = found; break; }
+    }
+    if (!layer) layer = activeSublayer();
+    if (!layer) return;
+
+    pushHistory();
+    const shape = {
+      id: makeId("X"),
+      type: "cabinet",
+      points: cb.points.map((p) => ({ x: p.x, y: p.y })),
+      depth: cb.depth,
+      side: cb.side,
+    };
+    layer.shapes.push(shape);
+    state.selection.clear();
+    state.selection.add(shape.id);
+  }
+
+  // Snap angle to the nearest 45° increment from world axes (the cabinet builder
+  // requires every segment to land on a 0/45/90/...° heading).
+  function snapAngleTo45(prev, cursor) {
+    const dx = cursor.x - prev.x;
+    const dy = cursor.y - prev.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) return { x: prev.x, y: prev.y, len: 0 };
+    const ang = Math.atan2(dy, dx);
+    const step = Math.PI / 4;
+    const snappedAng = Math.round(ang / step) * step;
+    // Project the cursor's distance onto the snapped heading so the segment
+    // length tracks the cursor naturally.
+    const dirX = Math.cos(snappedAng);
+    const dirY = Math.sin(snappedAng);
+    const proj = dx * dirX + dy * dirY;
+    let newLen = Math.max(0, proj);
+    if (state.snap) newLen = Math.round(newLen / state.gridSize) * state.gridSize;
+    return {
+      x: prev.x + dirX * newLen,
+      y: prev.y + dirY * newLen,
+      len: newLen,
+    };
+  }
+
+  // ---------- Color popup ----------
+  function bindColorPopup() {
+    colorPopupEl.addEventListener("click", (e) => {
+      const swatch = e.target.closest(".color-swatch");
+      if (!swatch || !state.colorPopup) return;
+      const newColor = swatch.dataset.color;
+      const subId = state.colorPopup.subId;
+      let target = null;
+      for (const story of state.stories) {
+        const sub = story.sublayers.find((l) => l.id === subId);
+        if (sub) { target = sub; break; }
+      }
+      if (target && target.color !== newColor) {
+        pushHistory();
+        target.color = newColor;
+        renderLayerTree();
+        render();
+      }
+      hideColorPopup();
+    });
+
+    document.addEventListener("pointerdown", (e) => {
+      if (!state.colorPopup) return;
+      if (e.target.closest("#color-popup")) return;
+      if (e.target.closest('[data-action="color-sub"]')) return;
+      hideColorPopup();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && state.colorPopup) {
+        hideColorPopup();
+      }
+    });
+  }
+
+  function toggleColorPopup(anchorEl, sub) {
+    if (state.colorPopup && state.colorPopup.subId === sub.id) {
+      hideColorPopup();
+      return;
+    }
+    showColorPopup(anchorEl, sub);
+  }
+
+  function showColorPopup(anchorEl, sub) {
+    state.colorPopup = { subId: sub.id };
+    colorPopupEl.innerHTML = "";
+    for (const c of LAYER_COLOR_PALETTE) {
+      const swatch = document.createElement("button");
+      swatch.className = "color-swatch" + (c.toLowerCase() === (sub.color || "").toLowerCase() ? " selected" : "");
+      swatch.style.background = c;
+      swatch.dataset.color = c;
+      swatch.title = c;
+      colorPopupEl.appendChild(swatch);
+    }
+    colorPopupEl.classList.remove("hidden");
+
+    const rect = anchorEl.getBoundingClientRect();
+    const popupW = colorPopupEl.offsetWidth;
+    const popupH = colorPopupEl.offsetHeight;
+    let left = rect.right + 8;
+    let top = rect.top - 4;
+    if (left + popupW > window.innerWidth - 8) left = rect.left - popupW - 8;
+    if (top + popupH > window.innerHeight - 8) top = window.innerHeight - popupH - 8;
+    if (top < 8) top = 8;
+    if (left < 8) left = 8;
+    colorPopupEl.style.left = left + "px";
+    colorPopupEl.style.top = top + "px";
+  }
+
+  function hideColorPopup() {
+    state.colorPopup = null;
+    colorPopupEl.classList.add("hidden");
+  }
+
+  // ---------- Events ----------
+  function bindEvents() {
+    window.addEventListener("resize", () => { fitCanvas(); clampPanel(); render(); });
+
+    toolListEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".tool");
+      if (!btn) return;
+      setTool(btn.dataset.tool);
+    });
+
+    zoomInBtn.addEventListener("click", () => setZoom(state.zoom * 1.25));
+    zoomOutBtn.addEventListener("click", () => setZoom(state.zoom / 1.25));
+    zoomResetBtn.addEventListener("click", () => {
+      state.zoom = 1;
+      centerView();
+      zoomReadout.textContent = "100%";
+      render();
+    });
+
+    gridSizeInput.addEventListener("input", () => {
+      const v = parseFloat(gridSizeInput.value);
+      if (!isFinite(v) || v < 0.1) return;
+      state.gridSize = v;
+      render();
+    });
+    snapToggle.addEventListener("change", () => {
+      state.snap = snapToggle.checked;
+      render();
+    });
+
+    gridOpacityInput.addEventListener("input", () => {
+      const v = parseFloat(gridOpacityInput.value);
+      if (!isFinite(v)) return;
+      state.gridOpacity = Math.max(0, Math.min(1, v / 100));
+      render();
+    });
+
+    layerTreeEl.addEventListener("click", (e) => {
+      const actionBtn = e.target.closest("[data-action]");
+      const subRow = e.target.closest(".sub-row");
+      const storyEl = e.target.closest(".story");
+      const story = storyEl ? state.stories.find((s) => s.id === storyEl.dataset.storyId) : null;
+
+      if (actionBtn) {
+        e.stopPropagation();
+        if (!story) return;
+        const action = actionBtn.dataset.action;
+        if (action === "expand") {
+          story.expanded = !story.expanded;
+          renderLayerTree();
+        } else if (action === "vis-story") {
+          pushHistory();
+          story.visible = !story.visible;
+          renderLayerTree();
+          render();
+        } else if (action === "add-sub") {
+          const name = prompt("Name for new sub-layer:", "New Layer");
+          if (name && name.trim()) {
+            pushHistory();
+            addSublayer(story.id, name.trim());
+            renderLayerTree();
+            render();
+          }
+        } else if (action === "vis-sub" && subRow) {
+          const sub = story.sublayers.find((l) => l.id === subRow.dataset.subId);
+          if (sub) {
+            pushHistory();
+            sub.visible = !sub.visible;
+            renderLayerTree();
+            render();
+          }
+        } else if (action === "color-sub" && subRow) {
+          const sub = story.sublayers.find((l) => l.id === subRow.dataset.subId);
+          if (sub) toggleColorPopup(actionBtn, sub);
+        }
+        return;
+      }
+
+      if (subRow) {
+        // If the cabinet builder is active and the user switches layers, treat
+        // it the same as a tool switch: commit substantial work, drop a stub.
+        if (state.cabinetBuilder) {
+          if (state.cabinetBuilder.points.length >= 2) commitCabinet(state.cabinetBuilder);
+          state.cabinetBuilder = null;
+          detachCabinetModalFromPalette();
+          if (state.tool === "cabinet") setTool("select");
+        }
+        state.activeSublayerId = subRow.dataset.subId;
+        renderLayerTree();
+      }
+    });
+
+    addStoryBtn.addEventListener("click", () => {
+      pushHistory();
+      addStory();
+      renderLayerTree();
+      render();
+    });
+
+    undoBtn.addEventListener("click", undo);
+    redoBtn.addEventListener("click", redo);
+    clearBtn.addEventListener("click", () => {
+      const layer = activeSublayer();
+      if (!layer || !layer.shapes.length) return;
+      pushHistory();
+      for (const sh of layer.shapes) state.selection.delete(sh.id);
+      layer.shapes = [];
+      render();
+    });
+
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      if (e.shiftKey) {
+        state.pan.x -= e.deltaY;
+        render();
+      } else {
+        const factor = Math.pow(1.0015, -e.deltaY);
+        setZoom(state.zoom * factor, { x: sx, y: sy });
+      }
+    }, { passive: false });
+
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointerleave", () => {
+      if (state.panning) endPan();
+    });
+    canvas.addEventListener("contextmenu", (e) => {
+      if (state.pending) { e.preventDefault(); state.pending = null; render(); }
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.target.matches("input, select, textarea")) return;
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      if (e.key === " " && !state.spaceDown) {
+        state.spaceDown = true;
+        wrap.classList.add("tool-pan");
+        e.preventDefault();
+        return;
+      }
+      if (ctrl && e.key.toLowerCase() === "d") {
+        if (state.tool === "select" && state.selection.size > 0) {
+          duplicateSelected();
+          render();
+          e.preventDefault();
+        }
+        return;
+      }
+      if (ctrl && e.key.toLowerCase() === "z") {
+        if (e.shiftKey) redo(); else undo();
+        e.preventDefault();
+        return;
+      }
+      if (ctrl && e.key.toLowerCase() === "y") {
+        redo();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (state.tool === "select" && state.selection.size > 0) {
+          deleteSelected();
+          render();
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        if (state.pending) { state.pending = null; render(); }
+        else if (state.placing) { state.placing = null; wrap.classList.remove("placing"); render(); }
+        else if (state.textPending) { cancelTextInline(); }
+        else if (state.stairsDirection || !stairsModal.classList.contains("hidden")) { cancelStairs(); }
+        else if (state.cabinetBuilder) { finishCabinetBuilder(); }
+        else if (state.tool === "select" && state.selection.size > 0) {
+          state.selection.clear();
+          render();
+        }
+        return;
+      }
+      if (e.key === "Shift") {
+        state.shiftDown = true;
+        if (state.pending) render();
+        return;
+      }
+      if (ctrl) return;
+
+      const k = e.key.toLowerCase();
+      if (k === "v") setTool("select");
+      else if (k === "l") setTool("line");
+      else if (k === "b") setTool("box");
+      else if (k === "t") setTool("text");
+      else if (k === "s") setTool("stairs");
+      else if (k === "m") setTool("measure");
+      else if (k === "h") setTool("pan");
+    });
+
+    window.addEventListener("keyup", (e) => {
+      if (e.key === " ") {
+        state.spaceDown = false;
+        if (!state.panning) {
+          wrap.classList.remove("tool-pan");
+          wrap.classList.add("tool-" + state.tool);
+        }
+      } else if (e.key === "Shift") {
+        state.shiftDown = false;
+        if (state.pending) render();
+      }
+    });
+  }
+
+  function localPointer(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function onPointerDown(e) {
+    const sp = localPointer(e);
+    const isPan = state.tool === "pan" || state.spaceDown || e.button === 1;
+    if (isPan) { startPan(sp, e); return; }
+    if (e.button !== 0) return;
+
+    if (state.tool === "select") {
+      handleSelectPointerDown(sp, e);
+      canvas.setPointerCapture?.(e.pointerId);
+      return;
+    }
+
+    if (state.tool === "text") {
+      const wp = snapWorld(screenToWorld(sp.x, sp.y));
+      const sScreen = worldToScreen(wp.x, wp.y);
+      showTextInlineEditor(sScreen, wp);
+      return;
+    }
+
+    if (state.tool === "stairs") {
+      // First click sets the start. Drag, then release to commit direction and open modal.
+      const wp = snapWorld(screenToWorld(sp.x, sp.y));
+      state.stairsDirection = { start: wp };
+      canvas.setPointerCapture?.(e.pointerId);
+      render();
+      return;
+    }
+
+    if (state.tool === "line" || state.tool === "measure") {
+      const rawWorld = screenToWorld(sp.x, sp.y);
+      const startWorld = state.tool === "measure" ? snapMeasurePoint(rawWorld) : snapWorld(rawWorld);
+      if (!state.pending) {
+        state.pending = { type: state.tool, start: startWorld };
+      } else {
+        const a = state.pending.start;
+        const end = constrainLine(a, screenToWorld(sp.x, sp.y), e.shiftKey);
+        const b = state.tool === "measure" ? snapMeasurePoint(end) : snapWorld(end);
+        if (a.x !== b.x || a.y !== b.y) {
+          const layer = state.pending.type === "measure" ? getMeasurementsLayer() : activeSublayer();
+          if (layer) {
+            pushHistory();
+            const shape = {
+              id: makeId("X"),
+              type: state.pending.type,
+              x1: a.x, y1: a.y,
+              x2: b.x, y2: b.y,
+            };
+            if (state.pending.type === "measure") {
+              shape.offset = computeMeasureOffset(a, b, screenToWorld(sp.x, sp.y));
+            }
+            layer.shapes.push(shape);
+            renderLayerTree();
+          }
+        }
+        state.pending = null;
+      }
+      render();
+    }
+
+    if (state.tool === "box") {
+      const wp = snapWorld(screenToWorld(sp.x, sp.y));
+      if (!state.pending) {
+        state.pending = { type: "box", start: wp };
+      } else {
+        const a = state.pending.start;
+        const b = wp;
+        if (a.x !== b.x && a.y !== b.y) {
+          const layer = activeSublayer();
+          if (layer) commitBox(layer, a, b);
+        }
+        state.pending = null;
+      }
+      render();
+    }
+
+    if (state.tool === "cabinet" && state.cabinetBuilder) {
+      const cb = state.cabinetBuilder;
+      const wp = screenToWorld(sp.x, sp.y);
+      if (cb.points.length === 0) {
+        // First node: snap to grid (or wall corner via measure-style endpoint snap)
+        const ep = findNearestEndpoint(wp);
+        const start = ep || (state.snap ? snapWorld(wp) : wp);
+        cb.points.push({ x: start.x, y: start.y });
+      } else {
+        const prev = cb.points[cb.points.length - 1];
+        const next = snapAngleTo45(prev, wp);
+        if (next.len > 0) cb.points.push({ x: next.x, y: next.y });
+      }
+      render();
+    }
+  }
+
+  function onPointerMove(e) {
+    const sp = localPointer(e);
+    state.cursorScreen = sp;
+    const wp = screenToWorld(sp.x, sp.y);
+    state.cursorWorld = wp;
+    state.shiftDown = !!e.shiftKey;
+
+    const display = state.snap ? snapWorld(wp) : wp;
+    statusPos.textContent = `${formatFeet(display.x)}, ${formatFeet(display.y)}`;
+
+    if (state.panning) {
+      const dx = sp.x - state.panStart.x;
+      const dy = sp.y - state.panStart.y;
+      state.pan.x = state.panOrigin.x + dx;
+      state.pan.y = state.panOrigin.y + dy;
+      render();
+      return;
+    }
+
+    if (state.placing) { render(); return; }
+
+    if (state.tool === "select") {
+      if (state.selectionMode) handleSelectPointerMove(wp, e);
+      else updateSelectCursor(sp);
+      return;
+    }
+
+    if (state.tool === "stairs" && state.stairsDirection) {
+      render();
+      return;
+    }
+
+    if (state.tool === "cabinet" && state.cabinetBuilder) {
+      render();
+      return;
+    }
+
+    if (state.pending) render();
+    else if (state.tool === "measure") render();
+    else if (state.snap && (state.tool === "line" || state.tool === "box")) render();
+  }
+
+  function onPointerUp(e) {
+    if (state.panning) { endPan(); return; }
+    if (state.tool === "select" && state.selectionMode) {
+      finishSelectionAction();
+      canvas.releasePointerCapture?.(e.pointerId);
+      return;
+    }
+    if (state.tool === "stairs" && state.stairsDirection) {
+      const start = state.stairsDirection.start;
+      const end = getStairsArrowEnd();
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 0.5) {
+        // Treat as a click without a real drag — cancel
+        state.stairsDirection = null;
+        render();
+      } else {
+        state.stairsDirection.angle = Math.atan2(dy, dx);
+        state.stairsDirection.length = len;
+        showStairsModal();
+        render();
+      }
+      canvas.releasePointerCapture?.(e.pointerId);
+    }
+  }
+
+  function startPan(sp, e) {
+    state.panning = true;
+    state.panStart = sp;
+    state.panOrigin = { ...state.pan };
+    wrap.classList.add("panning");
+    canvas.setPointerCapture?.(e.pointerId);
+  }
+
+  function endPan() {
+    state.panning = false;
+    state.panStart = null;
+    state.panOrigin = null;
+    wrap.classList.remove("panning");
+  }
+
+  init();
+})();
