@@ -1,0 +1,29 @@
+name: Trigger website rebuild
+
+# Every push to main re-clones the drafting repo into the website's dist/app/
+# directory at deploy time. This workflow pings Cloudflare's deploy hook so
+# the website rebuild fires automatically, instead of needing a manual empty
+# commit on the website repo each time we ship drafting changes.
+
+on:
+  push:
+    branches: [main]
+
+  # Lets you re-run from the GitHub Actions tab if a deploy hook ping fails
+  # or you want to retrigger without pushing a new commit.
+  workflow_dispatch:
+
+concurrency:
+  group: website-rebuild
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST to Cloudflare deploy hook
+        run: |
+          curl --silent --show-error --fail --location \
+            --request POST \
+            --max-time 30 \
+            "${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}"
