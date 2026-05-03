@@ -43,6 +43,15 @@ function init() {
   // anyway, but this gives us the brand mark on the very first PDF.
   if (typeof ensureWatermarkLogo === "function") ensureWatermarkLogo();
   render();
+
+  // First-time-user walkthrough. No-op if the visitor has already seen it
+  // (localStorage gate inside maybeAutoStartTour). Demo-mode skips it via
+  // CSS — the embed has its own onboarding cues.
+  if (typeof maybeAutoStartTour === "function") {
+    // Defer one frame so the layer tree / palette / sheet list are painted
+    // before the tour tries to anchor to them.
+    requestAnimationFrame(() => maybeAutoStartTour());
+  }
 }
 
 init();

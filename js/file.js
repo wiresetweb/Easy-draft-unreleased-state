@@ -398,6 +398,9 @@ function bindFileMenu() {
     else if (action === "save") fileSave();
     else if (action === "save-as") fileSaveAs();
     else if (action === "export") fileExport();
+    else if (action === "walkthrough") {
+      if (typeof startTour === "function") startTour();
+    }
   });
 
   document.addEventListener("pointerdown", (e) => {

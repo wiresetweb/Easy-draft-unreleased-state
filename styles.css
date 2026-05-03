@@ -2067,6 +2067,120 @@ body.demo-mode #layer-hint-modal {
   display: none !important;
 }
 
+/* ============================================================
+   Walkthrough — first-time-user tour. js/tour.js inserts a
+   .tour-card at the bottom of the viewport and adds .tour-target
+   to the element it wants the user to look at next. The card stays
+   put across steps; only its copy + the highlighted target change.
+   ============================================================ */
+
+.tour-card {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(26, 42, 54, 0.18), var(--shadow-md);
+  padding: 14px 18px 12px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  user-select: none;
+}
+
+.tour-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tour-card-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+.tour-card-step {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tour-card-body {
+  color: var(--text);
+}
+
+.tour-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.tour-card-skip {
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 2px;
+  text-decoration: underline;
+}
+.tour-card-skip:hover { color: var(--text); }
+
+.tour-card-next {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
+}
+.tour-card-next:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.tour-card-next:active { transform: translateY(1px); }
+
+/* Glow around whatever element the current step is asking the user to
+   interact with. Doesn't change the element's layout — just paints over
+   it with a pulsing orange halo. */
+.tour-target {
+  position: relative;
+  z-index: 5;
+  border-radius: var(--radius-sm);
+  animation: tour-target-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tour-target-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px rgba(232, 96, 44, 0.55),
+      0 0 18px rgba(232, 96, 44, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px rgba(232, 96, 44, 0.85),
+      0 0 32px rgba(232, 96, 44, 0.70);
+  }
+}
+
+/* In demo-mode the tour stays out of the way — the marketing widget has
+   its own onboarding hint pill and the full tour would crowd the embed. */
+body.demo-mode .tour-card { display: none !important; }
+
+
 body.demo-mode .app {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
