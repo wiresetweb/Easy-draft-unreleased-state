@@ -29,6 +29,25 @@
 // window to roughly the time it takes one network round-trip to complete.
 state.paid = false;
 
+// Topbar badge — flips between "Free" and "Pro" based on state.paid. Safe
+// to call before the DOM is fully painted (no-ops if the element isn't
+// there yet) so callers don't have to know about init ordering.
+function updatePlanBadge() {
+  const el = document.getElementById("plan-badge");
+  if (!el) return;
+  if (state.paid) {
+    el.textContent = "Pro";
+    el.classList.remove("plan-badge-free");
+    el.classList.add("plan-badge-pro");
+    el.title = "Pro version — exports are clean";
+  } else {
+    el.textContent = "Free";
+    el.classList.remove("plan-badge-pro");
+    el.classList.add("plan-badge-free");
+    el.title = "Free version — exports are watermarked";
+  }
+}
+
 const SUPABASE_SDK_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js";
 
 (function bootstrapEntitlement() {
@@ -80,6 +99,7 @@ async function checkEntitlement(sb) {
     }
     if (data && data.status === "active") {
       state.paid = true;
+      updatePlanBadge();
     }
   } catch (err) {
     console.warn("[easy-draft] entitlement check failed:", err);

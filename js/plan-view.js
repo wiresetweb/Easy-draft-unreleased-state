@@ -1034,31 +1034,44 @@ function drawTitleBlockSection(kind, sheet, x, y, w, h, ppi) {
   const tb = sheet.titleBlock || {};
 
   if (kind === "firm") {
-    // Drafting Studio brand mark + label. Sized to fit the narrower title
-    // strip — "DRAFTING STUDIO" at 0.11" wraps under the brand dot, and
-    // the tagline drops to 0.06" so the section reads without crowding.
+    // Brand mark: actual product logo on top, "DRAFTING STUDIO" under it,
+    // tagline at the bottom. The logo image is preloaded by main.js
+    // (ensureWatermarkLogo) — if it hasn't loaded yet for some reason, we
+    // fall back to a small orange/slate gradient dot so the layout doesn't
+    // collapse and the section still reads as branded.
     const cx = x + w / 2;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    const dotR = Math.max(3, 0.12 * ppi);
-    // Brand mark — slate-deep at top blending into orange at bottom. Picks
-    // up both halves of the new palette in a tiny dot that prints cleanly.
-    const grad = ctx.createLinearGradient(cx - dotR, y + h * 0.28 - dotR, cx + dotR, y + h * 0.28 + dotR);
-    grad.addColorStop(0, "#2F4156");
-    grad.addColorStop(1, "#E8602C");
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cx, y + h * 0.28, dotR, 0, Math.PI * 2);
-    ctx.fill();
+    const logo = (typeof ensureWatermarkLogo === "function") ? ensureWatermarkLogo() : null;
+    const logoCenterY = y + h * 0.32;
+    if (logo && logo.complete && logo.naturalWidth > 0) {
+      // Constrain to ~75% of cell width and ~45% of cell height. Whichever
+      // is binding wins; aspect ratio preserved either way.
+      const maxW = w * 0.75;
+      const maxH = h * 0.45;
+      const aspect = logo.naturalWidth / logo.naturalHeight;
+      let lw = maxW, lh = maxW / aspect;
+      if (lh > maxH) { lh = maxH; lw = maxH * aspect; }
+      ctx.drawImage(logo, cx - lw / 2, logoCenterY - lh / 2, lw, lh);
+    } else {
+      const dotR = Math.max(3, 0.12 * ppi);
+      const grad = ctx.createLinearGradient(cx - dotR, logoCenterY - dotR, cx + dotR, logoCenterY + dotR);
+      grad.addColorStop(0, "#2F4156");
+      grad.addColorStop(1, "#E8602C");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, logoCenterY, dotR, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.fillStyle = "#1A2A36";
     ctx.font = `700 ${Math.round(0.11 * ppi)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.fillText("DRAFTING STUDIO", cx, y + h * 0.62);
+    ctx.fillText("DRAFTING STUDIO", cx, y + h * 0.72);
 
     ctx.fillStyle = "#4A6274";
     ctx.font = `${Math.round(0.07 * ppi)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.fillText("Residential Drafting", cx, y + h * 0.84);
+    ctx.fillText("Residential Drafting", cx, y + h * 0.90);
   } else if (kind === "project") {
     drawTBField("Project", tb.project || "—", x + padX, y + padY, w - padX * 2, h * 0.5 - padY, ppi, sheet);
     drawTBField("Address", tb.address || "—", x + padX, y + h * 0.5, w - padX * 2, h * 0.5 - padY, ppi, sheet);

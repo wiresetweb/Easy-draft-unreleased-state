@@ -119,6 +119,34 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Plan badge — pill next to the brand title that reads "Free" until the
+   visitor's session resolves to an active "base" entitlement, at which
+   point it flips to "Pro". js/auth.js drives the class swap. */
+.plan-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.plan-badge-free {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.plan-badge-pro {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent-strong);
 }
 .brand-sub {
   font-size: 11px;
