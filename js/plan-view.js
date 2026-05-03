@@ -1371,6 +1371,12 @@ function captureAllSheetsForPrint(dpi) {
 
       render();
 
+      // Watermark unpaid exports — drawn after the sheet renders so the
+      // diagonal "DRAFT" pattern + logo land on top of every shape and
+      // title-block element. Bakes into the captured PNG so it survives
+      // the trip through window.print().
+      drawExportWatermark(pw, ph);
+
       pages.push({
         dataUrl: canvas.toDataURL("image/png"),
         widthIn: dim.w,
@@ -1401,6 +1407,73 @@ function captureAllSheetsForPrint(dpi) {
     render();
   }
   return pages;
+}
+
+// ==============================================================================
+// Export watermark — applied to PDF exports for visitors without an active
+// "base" entitlement. The goal isn't DRM (the JS is right there for anyone
+// who wants to bypass it); it's making sure the export can't be passed off
+// as a finished drawing — a building inspector or contractor seeing the
+// diagonal "DRAFT" tile would never accept it.
+//
+// state.paid is set by js/auth.js after a successful Supabase entitlement
+// check. Anything else — file://, offline, unauthenticated, network error,
+// SDK load failure — leaves state.paid === false, so the watermark applies.
+// ==============================================================================
+
+const WATERMARK_LABEL = "DRAFT — easydraftonline.com";
+const WATERMARK_LOGO_SRC = "images/logo_transparent_background.png";
+let watermarkLogoEl = null;
+
+function ensureWatermarkLogo() {
+  if (watermarkLogoEl) return watermarkLogoEl;
+  watermarkLogoEl = new Image();
+  // Same-origin asset (or local file in file:// mode) — no CORS concern.
+  watermarkLogoEl.src = WATERMARK_LOGO_SRC;
+  return watermarkLogoEl;
+}
+
+function drawExportWatermark(canvasW, canvasH) {
+  if (state.paid) return;
+
+  const logo = ensureWatermarkLogo();
+
+  // Center logo first so the diagonal text overlays it — keeps the brand
+  // reading clearly without burying the text. If the image hasn't loaded
+  // yet (slow disk on a fresh page-load export), the text-only watermark
+  // still does the job on its own.
+  if (logo && logo.complete && logo.naturalWidth > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    const target = Math.min(canvasW, canvasH) * 0.55;
+    const aspect = logo.naturalWidth / logo.naturalHeight;
+    let lw, lh;
+    if (aspect >= 1) { lw = target; lh = target / aspect; }
+    else             { lh = target; lw = target * aspect; }
+    ctx.drawImage(logo, (canvasW - lw) / 2, (canvasH - lh) / 2, lw, lh);
+    ctx.restore();
+  }
+
+  // Tiled diagonal "DRAFT — easydraftonline.com" stripes. Sized as a
+  // fraction of the smaller paper dimension so the watermark scales with
+  // the page (Letter / Tabloid / Arch D all read the same).
+  ctx.save();
+  const fontPx = Math.max(36, Math.round(Math.min(canvasW, canvasH) * 0.075));
+  ctx.font = `900 ${fontPx}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  ctx.fillStyle = "rgba(220, 38, 38, 0.32)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.translate(canvasW / 2, canvasH / 2);
+  ctx.rotate(-Math.PI / 6);
+
+  const lineGap = fontPx * 2.4;
+  const diag = Math.hypot(canvasW, canvasH);
+  const lines = Math.ceil(diag / lineGap) + 2;
+  for (let i = -lines; i <= lines; i++) {
+    ctx.fillText(WATERMARK_LABEL, 0, i * lineGap);
+  }
+  ctx.restore();
 }
 
 // ==============================================================================

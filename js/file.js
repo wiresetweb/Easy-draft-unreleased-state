@@ -411,6 +411,10 @@ function bindFileMenu() {
     if (e.key === "Escape" && state.fileMenuOpen) hideFileMenu();
   });
 
+  // Plan-mode sidebar Export button — same handler as the File menu entry.
+  const planExportBtn = document.getElementById("plan-export-btn");
+  if (planExportBtn) planExportBtn.addEventListener("click", fileExport);
+
   updateFileLabel();
 }
 

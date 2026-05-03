@@ -38,6 +38,10 @@ function init() {
   renderSheetLayerTree();
   document.body.classList.add("mode-draw");
   updatePaletteVisibility();
+  // Kick off the watermark logo load early so the first export doesn't have
+  // to wait on the image — the export pipeline tolerates a missing image
+  // anyway, but this gives us the brand mark on the very first PDF.
+  if (typeof ensureWatermarkLogo === "function") ensureWatermarkLogo();
   render();
 }
 
