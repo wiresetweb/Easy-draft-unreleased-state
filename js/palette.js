@@ -515,7 +515,7 @@ function renderPalette() {
       itemEl.appendChild(icon);
       const name = document.createElement("span");
       name.className = "palette-item-name";
-      name.textContent = item.name;
+      name.textContent = paletteItemDisplayName(item);
       itemEl.appendChild(name);
       content.appendChild(itemEl);
     }
@@ -764,7 +764,7 @@ function placeItem(def, sectionKey, worldPos) {
   const { wallsLayer, walls } = findWallsForOpening(shape);
   let shouldCut = false;
   if (walls.length > 0) {
-    shouldCut = confirm(`Cut the wall to fit ${def.name}?`);
+    shouldCut = confirm(`Cut the wall to fit ${paletteItemDisplayName(def)}?`);
   }
 
   pushHistory();
