@@ -1406,7 +1406,7 @@ function captureAllSheetsForPrint(dpi) {
   };
 
   state.viewMode = "plan";
-  state.printContext = { ppi };
+  state.printContext = { ppi: dpi };
   // Hide the canvas while we cycle through sheet sizes — the user
   // shouldn't see the working area resize and flash through pages.
   canvas.style.visibility = "hidden";
