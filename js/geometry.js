@@ -75,8 +75,17 @@ function snapMeasurePoint(worldPos) {
   return snapWorld(worldPos);
 }
 
-// Format / parse feet (e.g. 3'-6")
+// Format / parse dimensions. Both functions dispatch on state.units so the
+// rest of the codebase keeps storing values in feet (the internal world unit)
+// and never has to know whether the visible UI is imperial or metric.
+
 function formatFeet(ft) {
+  if (state.units === "metric") return formatFeetMetric(ft);
+  return formatFeetImperial(ft);
+}
+
+// e.g. 3.5 ft → 3'-6"
+function formatFeetImperial(ft) {
   const sign = ft < 0 ? "-" : "";
   const abs = Math.abs(ft);
   const totalQuarters = Math.round(abs * 48);
@@ -102,8 +111,34 @@ function formatFeet(ft) {
   return sign + result;
 }
 
-// Accepts: 3 | 3.5 | 3' | 3 ft | 3'-6" | 3' 6" | 3'-6 1/2" | 36" | 36 in | 1/2"
+// e.g. 3.5 ft → 1067 mm; 30 ft → 9.14 m. Cutover at 1 m matches what residential
+// architectural plans tend to do — small dimensions in mm, room-sized in m.
+function formatFeetMetric(ft) {
+  const sign = ft < 0 ? "-" : "";
+  const mm = Math.abs(ft) * FT_TO_MM;
+  if (mm < 1000) return sign + Math.round(mm) + " mm";
+  const m = mm / 1000;
+  // Round to 2 decimals; strip trailing zeros so "1.50 m" reads as "1.5 m".
+  const text = m.toFixed(2).replace(/\.?0+$/, "");
+  return sign + text + " m";
+}
+
+// Accepts a wide set of formats so the user can type whatever feels natural.
+//
+//   Imperial: 3 | 3.5 | 3' | 3 ft | 3'-6" | 3' 6" | 3'-6 1/2" | 36" | 36 in | 1/2"
+//             — bare numbers are FEET (matches the input on the canvas).
+//
+//   Metric:   100 | 100mm | 100 mm | 0.1m | 0.1 m | 10cm | 10 cm
+//             — bare numbers are MILLIMETERS (matches what shows up on a
+//             metric set: dimensions on plans are in mm by convention).
+//
+// Both modes return a value in feet (the internal world unit).
 function parseFeet(str) {
+  if (state.units === "metric") return parseFeetMetric(str);
+  return parseFeetImperial(str);
+}
+
+function parseFeetImperial(str) {
   if (typeof str !== "string") return null;
   let s = str.trim();
   if (!s) return null;
@@ -149,6 +184,31 @@ function parseFeet(str) {
 
   if (!foundFt && !foundIn) return null;
   return feet + inches / 12;
+}
+
+function parseFeetMetric(str) {
+  if (typeof str !== "string") return null;
+  const s = str.trim();
+  if (!s) return null;
+
+  // Explicit unit suffixes win. Order matters: check `mm` before `m` so we
+  // don't strip the `m` from `mm` and misread the rest.
+  let m;
+  if ((m = s.match(/^(-?\d+(?:\.\d+)?)\s*mm$/i))) {
+    return parseFloat(m[1]) * MM_TO_FT;
+  }
+  if ((m = s.match(/^(-?\d+(?:\.\d+)?)\s*cm$/i))) {
+    return parseFloat(m[1]) * 10 * MM_TO_FT;
+  }
+  if ((m = s.match(/^(-?\d+(?:\.\d+)?)\s*m$/i))) {
+    return parseFloat(m[1]) * 1000 * MM_TO_FT;
+  }
+
+  // Bare number — millimeters by convention.
+  if ((m = s.match(/^(-?\d+(?:\.\d+)?)$/))) {
+    return parseFloat(m[1]) * MM_TO_FT;
+  }
+  return null;
 }
 
 // Curve geometry (quadratic Bezier) + point-distance helpers

@@ -94,9 +94,13 @@ function bindEvents() {
   });
 
   gridSizeInput.addEventListener("input", () => {
-    const v = parseFloat(gridSizeInput.value);
-    if (!isFinite(v) || v < 0.1) return;
-    state.gridSize = v;
+    const raw = parseFloat(gridSizeInput.value);
+    if (!isFinite(raw)) return;
+    // The input is whatever the current display unit is; convert to feet for
+    // storage. Floor at ~15 mm so neither unit can drive snap math to zero.
+    const ft = state.units === "metric" ? raw * MM_TO_FT : raw;
+    if (ft < 0.05) return;
+    state.gridSize = ft;
     render();
   });
   snapToggle.addEventListener("change", () => {

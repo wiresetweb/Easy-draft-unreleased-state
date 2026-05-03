@@ -49,6 +49,7 @@ function serializeDocument() {
       })),
     })),
     activeSublayerId: state.activeSublayerId,
+    units: state.units,
     view: {
       zoom: state.zoom,
       pan: { x: state.pan.x, y: state.pan.y },
@@ -86,6 +87,14 @@ function loadDocument(data) {
   state.activeSublayerId = data.activeSublayerId || null;
   if (!activeSublayer()) {
     state.activeSublayerId = pickFallbackActiveSublayerId();
+  }
+
+  // Honor the unit system saved with the document. Older files pre-date
+  // this field, so default to whatever the visitor already has set rather
+  // than forcing them back to imperial.
+  if (data.units === "metric" || data.units === "imperial") {
+    if (typeof setUnits === "function") setUnits(data.units);
+    else state.units = data.units;
   }
 
   if (data.view && typeof data.view === "object") {
@@ -398,6 +407,9 @@ function bindFileMenu() {
     else if (action === "save") fileSave();
     else if (action === "save-as") fileSaveAs();
     else if (action === "export") fileExport();
+    else if (action === "settings") {
+      if (typeof showSettingsModal === "function") showSettingsModal();
+    }
     else if (action === "walkthrough") {
       if (typeof startTour === "function") startTour();
     }

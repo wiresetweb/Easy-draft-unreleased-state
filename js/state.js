@@ -8,6 +8,13 @@
 const PX_PER_FOOT = 20;
 const MAX_HISTORY = 100;
 
+// Imperial ↔ metric. World coordinates are always stored in feet — the unit
+// system is a display / parse concern, not a storage one. That keeps existing
+// .dstudio.json files binary-compatible across an imperial → metric switch.
+const FT_TO_MM = 304.8;
+const MM_TO_FT = 1 / 304.8;
+const UNITS_STORAGE_KEY = "easydraft.units";
+
 const MEASURE_COLOR = "#dc2626";
 const MEASURE_BORDER_SOFT = "rgba(220, 38, 38, 0.5)";
 
@@ -306,6 +313,13 @@ const state = {
   // (state.contextMenuAnchor) when the menu was triggered.
   clipboard: [],
   contextMenuAnchor: null,
+
+  // Display unit system. "imperial" = feet & inches (default); "metric" =
+  // millimeters / meters. World coordinates are always stored in feet —
+  // formatFeet / parseFeet convert at the boundary based on this flag.
+  // Persisted in localStorage and serialized into the document so a
+  // metric-mode drawing reopens in metric mode regardless of who opens it.
+  units: "imperial",
 };
 
 // ==============================================================================
@@ -323,6 +337,7 @@ const zoomResetBtn = document.getElementById("zoom-reset");
 const zoomReadout = document.getElementById("zoom-readout");
 
 const gridSizeInput = document.getElementById("grid-size");
+const gridSuffixEl = document.getElementById("grid-suffix");
 const snapToggle = document.getElementById("snap-toggle");
 const gridOpacityInput = document.getElementById("grid-opacity");
 

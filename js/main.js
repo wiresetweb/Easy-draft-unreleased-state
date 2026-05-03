@@ -6,6 +6,9 @@
 // ==============================================================================
 
 function init() {
+  // Pull the saved unit system before anything that reads it (layer tree
+  // shows formatted dimensions, palette renders names, etc.).
+  if (typeof loadSavedUnits === "function") loadSavedUnits();
   addStory();
   bindEvents();
   fitCanvas();
@@ -26,6 +29,7 @@ function init() {
   bindLayerHintModal();
   bindContextMenu();
   bindFileMenu();
+  bindSettingsModal();
   bindModeSwitch();
   bindSheetList();
   bindSheetProperties();
@@ -38,6 +42,9 @@ function init() {
   renderSheetLayerTree();
   document.body.classList.add("mode-draw");
   updatePaletteVisibility();
+  // Sync the unit-dependent UI (grid input attrs, scale dropdown, palette
+  // labels) with whatever we loaded from localStorage above.
+  if (typeof applyUnitsToUI === "function") applyUnitsToUI();
   // Kick off the watermark logo load early so the first export doesn't have
   // to wait on the image — the export pipeline tolerates a missing image
   // anyway, but this gives us the brand mark on the very first PDF.

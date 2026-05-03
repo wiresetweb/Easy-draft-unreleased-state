@@ -1,0 +1,143 @@
+'use strict';
+
+// ==============================================================================
+// Unit system — imperial ↔ metric.
+//
+// Internal world coordinates are always in feet. This file owns the boundary
+// where the UI shows and accepts dimensions in the user's chosen unit. The
+// bulk of the conversion is in geometry.js's formatFeet / parseFeet — those
+// dispatch on state.units. This file handles the rest:
+//
+//   • Grid input attributes (min/max/step/suffix/value) when the unit
+//     changes — the input is in display units, not feet.
+//   • Plan-mode scale dropdown — imperial scales (1/4" = 1'-0", …) vs.
+//     metric scales (1:50, 1:100, …).
+//   • Palette item display names — the catalog names embed imperial sizes
+//     ("Range 30\""); a regex transformer rewrites them as mm.
+//   • Persistence — localStorage so the user's choice survives reloads,
+//     plus serializing the value into saved .dstudio.json files.
+//
+// Invariant: state.units only changes through setUnits(). Anything that
+// touches the unit system through state directly will desync the UI.
+// ==============================================================================
+
+function setUnits(units) {
+  if (units !== "imperial" && units !== "metric") return;
+  if (state.units === units) return;
+  state.units = units;
+  try { localStorage.setItem(UNITS_STORAGE_KEY, units); } catch (_) { /* private mode */ }
+  applyUnitsToUI();
+}
+
+function loadSavedUnits() {
+  let saved = null;
+  try { saved = localStorage.getItem(UNITS_STORAGE_KEY); } catch (_) { saved = null; }
+  if (saved === "metric" || saved === "imperial") {
+    state.units = saved;
+  }
+}
+
+// Apply the current state.units to every UI surface that needs to change.
+// Idempotent — safe to call on init or every time the user toggles.
+function applyUnitsToUI() {
+  applyUnitsToGridInput();
+  if (typeof populateScaleSelect === "function") populateScaleSelect();
+  if (typeof renderPalette === "function") renderPalette();
+  if (typeof renderSheetProperties === "function") renderSheetProperties();
+  if (typeof updateLineModal === "function") updateLineModal();
+  if (typeof updateDimModal === "function") updateDimModal();
+  if (typeof updateMeasureModal === "function") updateMeasureModal();
+  if (typeof render === "function") render();
+}
+
+function applyUnitsToGridInput() {
+  if (!gridSizeInput) return;
+  if (state.units === "metric") {
+    gridSizeInput.min = "25";
+    gridSizeInput.max = "30000";
+    gridSizeInput.step = "25";
+    gridSizeInput.value = String(Math.round(state.gridSize * FT_TO_MM));
+    if (gridSuffixEl) gridSuffixEl.textContent = "mm / sq";
+  } else {
+    gridSizeInput.min = "0.25";
+    gridSizeInput.max = "100";
+    gridSizeInput.step = "0.25";
+    // Trim trailing zeros in the step-friendly representation.
+    gridSizeInput.value = String(Number((state.gridSize).toFixed(4)));
+    if (gridSuffixEl) gridSuffixEl.textContent = "ft / sq";
+  }
+}
+
+// ---------- Palette label transformer ----------
+//
+// Catalog names like 'Range 30"' or 'Single Hung 2\'-0" × 3\'-0"' are
+// rewritten to mm in metric mode. Plain regex pass — finds feet-and-inches
+// fragments and replaces them with their millimeter equivalent rounded to
+// the nearest mm.
+
+function metricizeLabel(name) {
+  if (typeof name !== "string") return name;
+  // 1) feet-inches fragments: 2'-8" or 2'-6 1/2"
+  let out = name.replace(
+    /(\d+(?:\.\d+)?)'[-\s]*(\d+)(?:\s+(\d+)\/(\d+))?"/g,
+    (_m, ft, inches, num, den) => {
+      let total = parseFloat(ft) * 12 + parseInt(inches, 10);
+      if (num && den) total += parseInt(num, 10) / parseInt(den, 10);
+      return Math.round(total * 25.4) + "mm";
+    },
+  );
+  // 2) lone-feet fragments: 5'   (after the inches pattern so we don't double up)
+  out = out.replace(/(\d+(?:\.\d+)?)'/g, (_m, ft) => Math.round(parseFloat(ft) * 304.8) + "mm");
+  // 3) lone-inches fragments: 30" or 1/2"
+  out = out.replace(/(\d+)\/(\d+)"/g, (_m, num, den) => Math.round((parseInt(num, 10) / parseInt(den, 10)) * 25.4) + "mm");
+  out = out.replace(/(\d+(?:\.\d+)?)"/g, (_m, inches) => Math.round(parseFloat(inches) * 25.4) + "mm");
+  return out;
+}
+
+function paletteItemDisplayName(item) {
+  if (!item || typeof item.name !== "string") return "";
+  if (state.units === "metric") return metricizeLabel(item.name);
+  return item.name;
+}
+
+// ---------- Settings modal ----------
+
+function showSettingsModal() {
+  const modal = document.getElementById("settings-modal");
+  if (!modal) return;
+  // Sync the radios to the live setting before showing.
+  const radios = modal.querySelectorAll('input[name="settings-units"]');
+  for (const r of radios) r.checked = (r.value === state.units);
+  modal.classList.remove("hidden");
+}
+
+function hideSettingsModal() {
+  const modal = document.getElementById("settings-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function bindSettingsModal() {
+  const modal = document.getElementById("settings-modal");
+  if (!modal) return;
+
+  const closeBtn = document.getElementById("settings-close");
+  if (closeBtn) closeBtn.addEventListener("click", hideSettingsModal);
+
+  // Click outside the window closes — common modal convention.
+  modal.addEventListener("pointerdown", (e) => {
+    if (e.target === modal) hideSettingsModal();
+  });
+
+  modal.querySelectorAll('input[name="settings-units"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      if (radio.checked) setUnits(radio.value);
+    });
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+      hideSettingsModal();
+      e.stopPropagation();
+    }
+  }, true);
+}

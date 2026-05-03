@@ -38,7 +38,7 @@
         <div class="control-group" title="Grid scale">
           <span class="control-label">Grid</span>
           <input type="number" id="grid-size" min="0.25" max="100" step="0.25" value="1" />
-          <span class="control-suffix">ft / sq</span>
+          <span class="control-suffix" id="grid-suffix">ft / sq</span>
           <label class="toggle">
             <input type="checkbox" id="snap-toggle" checked />
             <span>Snap</span>
@@ -438,6 +438,27 @@
 
   <div class="color-popup hidden" id="color-popup"></div>
 
+  <div class="settings-modal hidden" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="settings-window">
+      <div class="settings-header">
+        <span class="settings-title" id="settings-title">Settings</span>
+        <button class="btn-mini" id="settings-close" title="Close (Esc)">Close</button>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">Units</div>
+        <p class="settings-section-hint">Display dimensions in feet &amp; inches, or in millimeters / meters. Drawing data is stored independently of this choice — switching units never changes the dimensions of anything you've drawn.</p>
+        <label class="settings-radio">
+          <input type="radio" name="settings-units" value="imperial" />
+          <span><strong>Imperial</strong> &mdash; feet &amp; inches (e.g. 3'-6")</span>
+        </label>
+        <label class="settings-radio">
+          <input type="radio" name="settings-units" value="metric" />
+          <span><strong>Metric</strong> &mdash; millimeters / meters (e.g. 1067 mm)</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
   <div class="ctx-menu hidden" id="ctx-menu" role="menu" aria-label="Context menu">
     <button class="ctx-item" data-ctx-action="cut" role="menuitem">Cut <span class="ctx-shortcut">Ctrl+X</span></button>
     <button class="ctx-item" data-ctx-action="copy" role="menuitem">Copy <span class="ctx-shortcut">Ctrl+C</span></button>
@@ -459,6 +480,7 @@
     <div class="menu-separator"></div>
     <button class="menu-item" data-file-action="export" role="menuitem">Export&hellip;</button>
     <div class="menu-separator"></div>
+    <button class="menu-item" data-file-action="settings" role="menuitem">Settings&hellip;</button>
     <button class="menu-item" data-file-action="walkthrough" role="menuitem">Walkthrough</button>
   </div>
 
@@ -468,6 +490,7 @@
        file://). main.js calls init() once everything is loaded. -->
   <script src="js/config.js"></script>
   <script src="js/state.js"></script>
+  <script src="js/units.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/custom-furniture.js"></script>
   <script src="js/canvas-view.js"></script>

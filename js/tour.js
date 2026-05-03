@@ -76,7 +76,7 @@ function tourStepList() {
     {
       id: "draw-wall",
       title: "Draw a wall",
-      copy: "Easy Draft draws walls with the Line tool — already selected for you. Click two points on the canvas to drop a wall between them. The grid is in feet; the cursor snaps to it so lengths land clean.",
+      copy: "Easy Draft draws walls with the Line tool — already selected for you. Click two points on the canvas to drop a wall between them. The cursor snaps to the grid so lengths land clean.",
       anchor: () => document.querySelector('.tool[data-tool="line"]'),
       enter: () => { tourSnapshot.wallCount = tourCountShapesOnLayerName("Walls"); },
       advance: () => tourCountShapesOnLayerName("Walls") > (tourSnapshot.wallCount || 0),
@@ -96,7 +96,7 @@ function tourStepList() {
     {
       id: "thicken",
       title: "Make it a real wall",
-      copy: "Walls have framing, not just a centerline. In the popup, click 'Ext. wood' to make this a 6½″ exterior framed wall — watch it thicken on the canvas. (If the popup's gone, click your wall again first.)",
+      copy: "Walls have framing, not just a centerline. In the popup, click 'Ext. wood' to make this an exterior framed wall — watch it thicken on the canvas. (If the popup's gone, click your wall again first.)",
       anchor: () => {
         const row = document.getElementById("wall-thickness-row");
         if (!row || row.classList.contains("hidden")) return null;

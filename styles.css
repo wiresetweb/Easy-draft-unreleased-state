@@ -2180,6 +2180,93 @@ body.demo-mode #layer-hint-modal {
    its own onboarding hint pill and the full tour would crowd the embed. */
 body.demo-mode .tour-card { display: none !important; }
 
+/* ============================================================
+   Settings modal — File → Settings… opens a centered card with
+   the unit-system toggle (and any future global preferences).
+   ============================================================ */
+
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 42, 54, 0.45);
+  z-index: 1100;
+}
+.settings-modal.hidden { display: none; }
+
+.settings-window {
+  width: min(480px, calc(100vw - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 48px rgba(26, 42, 54, 0.32);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.settings-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.settings-section {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.settings-section + .settings-section {
+  border-top: 1px solid var(--border);
+}
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.settings-section-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  font-size: 13px;
+  color: var(--text);
+}
+.settings-radio:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.settings-radio input[type="radio"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.settings-radio strong { font-weight: 600; }
+
 
 body.demo-mode .app {
   grid-template-columns: 1fr;
