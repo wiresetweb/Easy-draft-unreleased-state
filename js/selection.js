@@ -232,16 +232,28 @@ function hasOpeningSelected() {
   return found;
 }
 
+// True when the only selection is a single line (or measure dimension) —
+// thick or thin. For these shapes, edge / corner resize handles are wrong:
+// the shape is conceptually 1-D, so dragging the NW corner of the bbox
+// would snap the wall's outer face to a grid intersection, leaving the
+// centerline (the part the user actually dimensions to) off-grid. We
+// suppress those handles and let the user resize via E/W endpoints only,
+// which sit on the centerline endpoints regardless of thickness.
+function selectionIsLineLike() {
+  if (state.selection.size !== 1) return false;
+  let sh = null;
+  for (const id of state.selection) sh = findShapeById(id);
+  return !!(sh && (sh.type === "line" || sh.type === "measure"));
+}
+
 function findHandleAtScreen(sx, sy, bbox, ob) {
   const handles = ob ? getHandlePositionsOriented(ob) : getHandlePositions(bbox);
   const skipResize = hasOpeningSelected();
 
   if (!skipResize) {
-    const degenerate = ob && ob.halfH < 1e-6;
+    const lineLike = selectionIsLineLike() || (ob && ob.halfH < 1e-6);
     for (const name in handles) {
-      // Lines collapse to a 1D rect (halfH = 0): only E/W are meaningful;
-      // every other handle overlaps them at the endpoints.
-      if (degenerate && name !== "e" && name !== "w") continue;
+      if (lineLike && name !== "e" && name !== "w") continue;
       const sp = worldToScreen(handles[name].x, handles[name].y);
       if (Math.abs(sx - sp.x) <= HANDLE_HIT && Math.abs(sy - sp.y) <= HANDLE_HIT) return name;
     }

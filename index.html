@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Drafting Studio</title>
-  <link rel="icon" type="image/png" href="images/logo_transparent_background small.png" />
+  <link rel="icon" type="image/png" href="images/logo_transparent_background_small.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <img class="brand-mark" src="images/logo_transparent_background small.png" alt="Drafting Studio logo" />
+        <img class="brand-mark" src="images/logo_transparent_background_small.png" alt="Drafting Studio logo" />
         <div class="brand-text">
           <div class="brand-title">
             <span>Drafting Studio</span>
@@ -247,7 +247,7 @@
             </button>
           </div>
         </div>
-        <div class="dim-hint">Type a size like <code>3'-0"</code> · <kbd>Enter</kbd> to apply</div>
+        <div class="dim-hint" id="dim-hint">Type a size like <code>3'-0"</code> &middot; <kbd>Enter</kbd> to apply</div>
       </div>
 
       <div class="line-modal hidden" id="line-modal">
@@ -436,7 +436,7 @@
             <span class="flip-icon">&#x21C6;</span> Flip Side
           </button>
         </div>
-        <div class="cabinet-modal-hint" id="cabinet-modal-hint">Click on the wall to place each cabinet point. The body draws once you have two points &mdash; if it's on the wrong side of your path, hit <kbd>F</kbd> or the Flip button to swap. Right-click undoes the last point. Esc finishes.</div>
+        <div class="cabinet-modal-hint" id="cabinet-modal-hint">Click on the wall to place each cabinet point. The body draws once you have two points &mdash; if it's on the wrong side of your path, hit <kbd>F</kbd> or the Flip button to swap. Right-click undoes the last point. Click <strong>Finish</strong> to commit, <kbd>Esc</kbd> to cancel.</div>
         <div class="cabinet-modal-actions">
           <button class="btn-mini" id="cabinet-cancel">Cancel</button>
           <button class="btn-mini cabinet-finish-btn" id="cabinet-finish">Finish</button>

@@ -396,7 +396,10 @@ function bindEvents() {
       if (state.pending) { state.pending = null; render(); }
       else if (state.placing) { state.placing = null; wrap.classList.remove("placing"); render(); }
       else if (state.stairsDirection || !stairsModal.classList.contains("hidden")) { cancelStairs(); }
-      else if (state.cabinetBuilder) { finishCabinetBuilder(); }
+      // Cabinet builder: Esc discards. Matches CAD convention (AutoCAD,
+      // SketchUp, Revit) where Esc always cancels the current command —
+      // committing is what the explicit Finish button is for.
+      else if (state.cabinetBuilder) { cancelCabinetBuilder(); }
       else if (state.tool === "select" && state.selection.size > 0) {
         state.selection.clear();
         render();

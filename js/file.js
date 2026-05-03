@@ -20,6 +20,15 @@ const hasFileSystemAccess =
   typeof window.showSaveFilePicker === "function" &&
   typeof window.showOpenFilePicker === "function";
 
+// True for the family of errors browsers throw when the user dismisses a
+// FileSystemAccess picker. AbortError is the spec name; some Chromium
+// versions throw NotAllowedError when a stale handle's permission prompt
+// gets cancelled. Either way it's a user gesture, not something to alert.
+function isFsCancelError(err) {
+  if (!err) return false;
+  return err.name === "AbortError" || err.name === "NotAllowedError";
+}
+
 function fileTypesFilter() {
   return [{
     description: "Drafting Studio drawing",
@@ -206,8 +215,8 @@ async function fileOpen() {
         updateFileLabel();
       }
     } catch (err) {
-      // AbortError = user cancelled the picker; that's expected, not an error.
-      if (err && err.name !== "AbortError") {
+      // User cancelled the picker — silent. Anything else is a real error.
+      if (!isFsCancelError(err)) {
         console.error(err);
         alert("Couldn't open the file: " + (err.message || err));
       }
@@ -271,7 +280,7 @@ async function fileSaveAs() {
       state.fileName = handle.name;
       updateFileLabel();
     } catch (err) {
-      if (err && err.name !== "AbortError") {
+      if (!isFsCancelError(err)) {
         console.error(err);
         alert("Couldn't save: " + (err.message || err));
       }

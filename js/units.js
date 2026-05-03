@@ -41,6 +41,7 @@ function loadSavedUnits() {
 // Idempotent — safe to call on init or every time the user toggles.
 function applyUnitsToUI() {
   applyUnitsToGridInput();
+  applyUnitsToDimHint();
   if (typeof populateScaleSelect === "function") populateScaleSelect();
   if (typeof renderPalette === "function") renderPalette();
   if (typeof renderSheetProperties === "function") renderSheetProperties();
@@ -48,6 +49,13 @@ function applyUnitsToUI() {
   if (typeof updateDimModal === "function") updateDimModal();
   if (typeof updateMeasureModal === "function") updateMeasureModal();
   if (typeof render === "function") render();
+}
+
+function applyUnitsToDimHint() {
+  const el = document.getElementById("dim-hint");
+  if (!el) return;
+  const example = state.units === "metric" ? "915 mm" : "3'-0\"";
+  el.innerHTML = `Type a size like <code>${example}</code> &middot; <kbd>Enter</kbd> to apply`;
 }
 
 function applyUnitsToGridInput() {
