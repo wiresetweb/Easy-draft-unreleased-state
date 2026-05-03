@@ -429,6 +429,7 @@ const cabinetModal = document.getElementById("cabinet-modal");
 const cabinetDepthInput = document.getElementById("cabinet-depth");
 const cabinetCancelBtn = document.getElementById("cabinet-cancel");
 const cabinetFinishBtn = document.getElementById("cabinet-finish");
+const cabinetFlipBtn = document.getElementById("cabinet-flip-side");
 
 // ==============================================================================
 // Tiny utilities

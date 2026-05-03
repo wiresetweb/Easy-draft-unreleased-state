@@ -427,7 +427,13 @@
           <label class="dim-label" for="cabinet-depth">Depth</label>
           <input type="text" class="dim-input" id="cabinet-depth" autocomplete="off" spellcheck="false" />
         </div>
-        <div class="cabinet-modal-hint" id="cabinet-modal-hint">Click on the wall where each cabinet point belongs &mdash; the cabinet body extends into the room automatically. Right-click undoes the last point. Esc finishes.</div>
+        <div class="dim-row">
+          <label class="dim-label">Side</label>
+          <button class="btn-mini cabinet-flip-btn" id="cabinet-flip-side" title="Flip cabinet to the other side of the path (F)">
+            <span class="flip-icon">&#x21C6;</span> Flip Side
+          </button>
+        </div>
+        <div class="cabinet-modal-hint" id="cabinet-modal-hint">Click on the wall to place each cabinet point. The body draws once you have two points &mdash; if it's on the wrong side of your path, hit <kbd>F</kbd> or the Flip button to swap. Right-click undoes the last point. Esc finishes.</div>
         <div class="cabinet-modal-actions">
           <button class="btn-mini" id="cabinet-cancel">Cancel</button>
           <button class="btn-mini cabinet-finish-btn" id="cabinet-finish">Finish</button>

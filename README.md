@@ -102,6 +102,8 @@ The Kitchen palette has appliances at standard residential dimensions (range, co
 
 When the active layer is *Kitchen*, the palette includes a **Cabinet Builder** tool. Click points along a wall and the builder traces a cabinet run; the cabinet body extends into the room at the depth you choose (default 2'-0", or 24"). Right-click pops the last point. `Esc` finishes the run. Any kitchen appliance the cabinet runs through automatically cuts a notch in the cabinet so the visible run matches reality.
 
+The body doesn't render until you've placed two points — with one click there's no path direction yet, so we wait. Once two points are down, the side is auto-detected from where you originally clicked relative to the path. If it lands on the wrong side, hit **F** or click the **Flip Side** button in the modal to swap.
+
 ### Islands
 
 Islands have their own modal: pick where the **tag** (label) sits — center, or one of the four corners — and toggle a raised **bar** along any side. The bar is drawn as the eat-at counter you'd see on a builder set.

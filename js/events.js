@@ -417,6 +417,15 @@ function bindEvents() {
     if (ctrl) return;
 
     const k = e.key.toLowerCase();
+
+    // Cabinet builder side flip — only active while the builder is up so it
+    // doesn't shadow a future tool shortcut on F.
+    if (k === "f" && state.cabinetBuilder) {
+      flipCabinetSide();
+      e.preventDefault();
+      return;
+    }
+
     if (k === "v") setTool("select");
     else if (k === "l") setTool("line");
     else if (k === "b") setTool("box");
