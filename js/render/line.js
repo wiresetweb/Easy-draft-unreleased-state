@@ -10,7 +10,11 @@ function drawLineShape(sh, color) {
   ctx.save();
   ctx.strokeStyle = color || SHAPE_COLOR;
   ctx.lineWidth = 1.5;
-  ctx.lineCap = sh.stroke === "dotted" ? "round" : "round";
+  // For dotted, lineCap MUST be "butt" — round caps fill the 0.1-unit dash
+  // with a half-circle on each side, restoring the visual line and erasing
+  // the gap. Dashed stays "round" because its 8px dashes are big enough
+  // that the rounded ends just look like soft edges.
+  ctx.lineCap = sh.stroke === "dotted" ? "butt" : "round";
   ctx.lineJoin = "round";
   if (sh.stroke === "dashed") ctx.setLineDash([8, 5]);
   else if (sh.stroke === "dotted") ctx.setLineDash([0.1, 5]);

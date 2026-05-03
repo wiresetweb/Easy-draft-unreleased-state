@@ -25,7 +25,10 @@
 
   // Whitelist of demo file basenames. Refusing arbitrary input blocks
   // ../../etc/passwd-style paths and accidental 404s if a typo lands.
-  const ALLOWED_DEMOS = new Set(["garage", "addition", "bedroom"]);
+  // Add an entry here only after the matching demos/<name>.dstudio.json
+  // file has actually shipped — an allowlist entry without a file just
+  // produces a fetch 404 + empty demo on the user's screen.
+  const ALLOWED_DEMOS = new Set(["garage"]);
   const safe = ALLOWED_DEMOS.has(demoName) ? demoName : "garage";
 
   // Tools available in demo mode. Anything else gets coerced to "select"

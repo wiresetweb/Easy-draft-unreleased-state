@@ -290,7 +290,8 @@ function onTourKeydown(e) {
     const modalOpen = document.querySelector(
       ".dim-modal:not(.hidden), .line-modal:not(.hidden), .text-modal:not(.hidden)," +
       " .measure-modal:not(.hidden), .stairs-modal:not(.hidden), .cabinet-modal:not(.hidden)," +
-      " .island-modal:not(.hidden), .layer-hint-modal:not(.hidden)"
+      " .island-modal:not(.hidden), .layer-hint-modal:not(.hidden)," +
+      " .settings-modal:not(.hidden)"
     );
     if (modalOpen) return;
     endTour(true);

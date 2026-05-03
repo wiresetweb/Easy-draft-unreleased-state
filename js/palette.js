@@ -395,6 +395,19 @@ function paletteSpecForLayer(sub) {
   return PALETTE_LAYERS[sub.name] || null;
 }
 
+// Free-standing items (islands, freestanding tubs, custom furniture) skip
+// the "snap to a wall" pass at placement time — dragging them against a
+// random nearby wall is more annoying than helpful when the user wants
+// the piece in the middle of the room. Used by both the live preview and
+// the final placement so they always agree on which items snap.
+function paletteSkipsWallSnap(sectionKey, def) {
+  if (!def) return false;
+  if (def.kind === "custom") return true;
+  if (sectionKey === "kitchen" && def.kind === "island") return true;
+  if (def.kind === "tub-freestand" || def.kind === "tub-soaker") return true;
+  return false;
+}
+
 function updatePaletteVisibility() {
   const sub = activeSublayer();
   const spec = paletteSpecForLayer(sub);
@@ -687,15 +700,7 @@ function placeItem(def, sectionKey, worldPos) {
 
   if (sectionKey === "kitchen" || sectionKey === "furniture" || sectionKey === "bathroom") {
     let x, y, angle;
-    // Free-standing pieces (islands, free-standing custom furniture, free-
-    // standing tubs) skip the wall-back snap so they don't drag against
-    // random walls.
-    const skipWallSnap =
-      (sectionKey === "kitchen" && def.kind === "island") ||
-      def.kind === "tub-freestand" ||
-      def.kind === "tub-soaker" ||
-      def.kind === "custom";
-    const wallBack = skipWallSnap
+    const wallBack = paletteSkipsWallSnap(sectionKey, def)
       ? null
       : detectWallBackedPosition(worldPos, def.width, def.depth, applianceWallGap(def.kind));
     if (wallBack) {
@@ -760,12 +765,13 @@ function placeItem(def, sectionKey, worldPos) {
     };
   }
 
-  // Detect walls this opening would land on (before pushing history)
+  // Auto-cut any wall the opening lands on. The dialog we used to show
+  // here interrupted every door/window drop — and the answer was always
+  // "yes," because the alternative is a door that visually plows through
+  // a wall. Undo (Ctrl+Z) reverses both the placement and the cut in one
+  // step if the user actually didn't want it.
   const { wallsLayer, walls } = findWallsForOpening(shape);
-  let shouldCut = false;
-  if (walls.length > 0) {
-    shouldCut = confirm(`Cut the wall to fit ${paletteItemDisplayName(def)}?`);
-  }
+  const shouldCut = walls.length > 0;
 
   pushHistory();
   layer.shapes.push(shape);

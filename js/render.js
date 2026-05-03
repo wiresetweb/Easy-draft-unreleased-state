@@ -260,10 +260,7 @@ function drawPlacingPreview() {
   let shape;
   let pos;
   if (sectionKey === "kitchen" || sectionKey === "furniture" || sectionKey === "bathroom") {
-    const skipWallSnap =
-      (sectionKey === "kitchen" && def.kind === "island") ||
-      def.kind === "custom";
-    const wallBack = skipWallSnap
+    const wallBack = paletteSkipsWallSnap(sectionKey, def)
       ? null
       : detectWallBackedPosition(state.cursorWorld, def.width, def.depth, applianceWallGap(def.kind));
     if (wallBack) {
