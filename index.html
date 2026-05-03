@@ -38,7 +38,7 @@
         <div class="control-group" title="Grid scale">
           <span class="control-label">Grid</span>
           <input type="number" id="grid-size" min="0.25" max="100" step="0.25" value="1" />
-          <span class="control-suffix">ft / sq</span>
+          <span class="control-suffix" id="grid-suffix">ft / sq</span>
           <label class="toggle">
             <input type="checkbox" id="snap-toggle" checked />
             <span>Snap</span>
@@ -137,6 +137,13 @@
             <label for="prop-drawn-by">Drawn By</label>
             <input class="prop-input" id="prop-drawn-by" type="text" autocomplete="off" />
           </div>
+        </div>
+      </div>
+
+      <div class="sidebar-section plan-only">
+        <div class="sidebar-title"><span>Export</span></div>
+        <div class="action-row">
+          <button class="action-icon action-text" id="plan-export-btn" title="Export every sheet as a PDF">Export PDF&hellip;</button>
         </div>
       </div>
 
@@ -420,7 +427,13 @@
           <label class="dim-label" for="cabinet-depth">Depth</label>
           <input type="text" class="dim-input" id="cabinet-depth" autocomplete="off" spellcheck="false" />
         </div>
-        <div class="cabinet-modal-hint" id="cabinet-modal-hint">Click on the wall where each cabinet point belongs &mdash; the cabinet body extends into the room automatically. Right-click undoes the last point. Esc finishes.</div>
+        <div class="dim-row">
+          <label class="dim-label">Side</label>
+          <button class="btn-mini cabinet-flip-btn" id="cabinet-flip-side" title="Flip cabinet to the other side of the path (F)">
+            <span class="flip-icon">&#x21C6;</span> Flip Side
+          </button>
+        </div>
+        <div class="cabinet-modal-hint" id="cabinet-modal-hint">Click on the wall to place each cabinet point. The body draws once you have two points &mdash; if it's on the wrong side of your path, hit <kbd>F</kbd> or the Flip button to swap. Right-click undoes the last point. Esc finishes.</div>
         <div class="cabinet-modal-actions">
           <button class="btn-mini" id="cabinet-cancel">Cancel</button>
           <button class="btn-mini cabinet-finish-btn" id="cabinet-finish">Finish</button>
@@ -430,6 +443,27 @@
   </div>
 
   <div class="color-popup hidden" id="color-popup"></div>
+
+  <div class="settings-modal hidden" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="settings-window">
+      <div class="settings-header">
+        <span class="settings-title" id="settings-title">Settings</span>
+        <button class="btn-mini" id="settings-close" title="Close (Esc)">Close</button>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">Units</div>
+        <p class="settings-section-hint">Display dimensions in feet &amp; inches, or in millimeters / meters. Drawing data is stored independently of this choice — switching units never changes the dimensions of anything you've drawn.</p>
+        <label class="settings-radio">
+          <input type="radio" name="settings-units" value="imperial" />
+          <span><strong>Imperial</strong> &mdash; feet &amp; inches (e.g. 3'-6")</span>
+        </label>
+        <label class="settings-radio">
+          <input type="radio" name="settings-units" value="metric" />
+          <span><strong>Metric</strong> &mdash; millimeters / meters (e.g. 1067 mm)</span>
+        </label>
+      </div>
+    </div>
+  </div>
 
   <div class="ctx-menu hidden" id="ctx-menu" role="menu" aria-label="Context menu">
     <button class="ctx-item" data-ctx-action="cut" role="menuitem">Cut <span class="ctx-shortcut">Ctrl+X</span></button>
@@ -451,13 +485,19 @@
     <button class="menu-item" data-file-action="save-as" role="menuitem">Save As&hellip;</button>
     <div class="menu-separator"></div>
     <button class="menu-item" data-file-action="export" role="menuitem">Export&hellip;</button>
+    <div class="menu-separator"></div>
+    <button class="menu-item" data-file-action="settings" role="menuitem">Settings&hellip;</button>
+    <button class="menu-item" data-file-action="walkthrough" role="menuitem">Walkthrough</button>
   </div>
 
   <!-- Load order matters: top-level const declarations need their dependencies
        evaluated first. Function declarations cross scripts via the shared
        classic-script lexical environment (no IIFE, no modules — works from
        file://). main.js calls init() once everything is loaded. -->
+  <script src="js/config.js"></script>
   <script src="js/state.js"></script>
+  <script src="js/units.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/custom-furniture.js"></script>
   <script src="js/canvas-view.js"></script>
   <script src="js/geometry.js"></script>
@@ -486,6 +526,7 @@
   <script src="js/plan-view.js"></script>
   <script src="js/file.js"></script>
   <script src="js/events.js"></script>
+  <script src="js/tour.js"></script>
   <script src="js/main.js"></script>
   <!-- demo-mode.js is a no-op unless ?demo=<name> is in the URL. Loaded
        LAST so init() has finished binding everything before it runs. -->

@@ -70,10 +70,38 @@ const ARCH_SCALES = {
   '1 1/2" = 1\'-0"': 1.5,
   '3" = 1\'-0"':    3,
 };
+// Metric architectural scales. Stored using the same units as ARCH_SCALES
+// (paper-inches per real-world-foot) so paperFitPpi() and friends don't have
+// to know which scale system they came from. Conversion: a "1:N" scale means
+// 1 paper-mm per N real-mm; converted to paper-in / real-ft, that's
+// (1/N) × 304.8 / 25.4 = 12 / N. So 1:100 → 0.12, 1:50 → 0.24, etc.
+const METRIC_SCALES = {
+  '1:10':  12 / 10,
+  '1:20':  12 / 20,
+  '1:50':  12 / 50,
+  '1:100': 12 / 100,
+  '1:200': 12 / 200,
+  '1:500': 12 / 500,
+};
 const DEFAULT_PAPER_INCHES_PER_FOOT = 1 / 4; // 1/4" = 1'-0"
+const DEFAULT_METRIC_SCALE_KEY = '1:100';
+
+function activeScaleTable() {
+  return state.units === "metric" ? METRIC_SCALES : ARCH_SCALES;
+}
+
+function defaultScaleKey() {
+  return state.units === "metric" ? DEFAULT_METRIC_SCALE_KEY : '1/4" = 1\'-0"';
+}
 
 function paperInchesPerFoot(sheet) {
-  const v = ARCH_SCALES[sheet?.titleBlock?.scale];
+  const key = sheet?.titleBlock?.scale;
+  // Look in both tables — the saved scale belongs to whichever unit system
+  // the user was in when they picked it; we don't want to invalidate the
+  // sheet just because the toggle moved.
+  const v = (ARCH_SCALES[key] !== undefined) ? ARCH_SCALES[key]
+          : (METRIC_SCALES[key] !== undefined) ? METRIC_SCALES[key]
+          : undefined;
   return typeof v === "number" ? v : DEFAULT_PAPER_INCHES_PER_FOOT;
 }
 
@@ -442,12 +470,16 @@ function collectScheduleData() {
     });
   }
 
+  // Display the catalog kind in the user's current units. The grouping key
+  // is still the original (English) kind, so two doors placed under different
+  // unit settings collapse into one schedule row instead of two.
+  const displayKind = (k) => state.units === "metric" ? metricizeLabel(k) : k;
   const doorRows = Array.from(doorGroups.values())
     .sort((a, b) => a.kind.localeCompare(b.kind))
-    .map((g, i) => [`D${i + 1}`, g.kind, formatFeet(g.width), String(g.count)]);
+    .map((g, i) => [`D${i + 1}`, displayKind(g.kind), formatFeet(g.width), String(g.count)]);
   const windowRows = Array.from(windowGroups.values())
     .sort((a, b) => a.kind.localeCompare(b.kind))
-    .map((g, i) => [`W${i + 1}`, g.kind, formatFeet(g.width), String(g.count)]);
+    .map((g, i) => [`W${i + 1}`, displayKind(g.kind), formatFeet(g.width), String(g.count)]);
 
   return [
     { title: "Doors",   columns: ["Mark", "Type", "Width", "Qty"], rows: doorRows,
@@ -837,11 +869,11 @@ function drawScaleBar(sheet, vp, ppi) {
     ctx.moveTo(tx + 0.5, barY + barH);
     ctx.lineTo(tx + 0.5, barY + barH + 0.05 * ppi);
     ctx.stroke();
-    // Foot value, centered beneath the tick (left-aligned at the leftmost
+    // Tick value, centered beneath the tick (left-aligned at the leftmost
     // and right-aligned at the rightmost so the labels don't run off the
     // ends of the bar).
-    const feet = i * plan.feetPerDiv;
-    const label = formatScaleFeet(feet);
+    const value = i * plan.valuePerDiv;
+    const label = plan.metric ? formatScaleMeters(value) : formatScaleFeet(value);
     if (i === 0) ctx.textAlign = "left";
     else if (i === plan.divs) ctx.textAlign = "right";
     else ctx.textAlign = "center";
@@ -850,17 +882,18 @@ function drawScaleBar(sheet, vp, ppi) {
   // Unit suffix to the right of the last label.
   ctx.textAlign = "left";
   ctx.fillStyle = "#4A6274";
-  ctx.fillText("FEET", barX + barW + 0.10 * ppi, barY + barH + 0.07 * ppi);
+  ctx.fillText(state.units === "metric" ? "M" : "FEET", barX + barW + 0.10 * ppi, barY + barH + 0.07 * ppi);
 
   ctx.restore();
 }
 
-// Per-scale "nice" feet-per-division so the bar lands on a clean number of
-// feet at a readable on-paper length. Halved iteratively if the resulting
-// bar would clip the available width — keeps the bar visible on small
-// sheets (Letter / ARCH-A) without abandoning round numbers.
+// Per-scale "nice" feet-per-division so the bar lands on a clean number at
+// a readable on-paper length. Imperial divisions are picked in feet; metric
+// divisions are picked in real-world meters (then converted to feet for the
+// bar geometry). Halved iteratively if the resulting bar would clip the
+// available width.
 function scaleBarPresetFor(scaleKey, availableInches) {
-  const STANDARD = {
+  const IMPERIAL_STANDARD = {
     '1/16" = 1\'-0"':  16,
     '1/8" = 1\'-0"':   8,
     '1/4" = 1\'-0"':   4,
@@ -871,22 +904,42 @@ function scaleBarPresetFor(scaleKey, availableInches) {
     '1 1/2" = 1\'-0"': 0.5,
     '3" = 1\'-0"':     0.5,
   };
-  const ipf = ARCH_SCALES[scaleKey] || DEFAULT_PAPER_INCHES_PER_FOOT;
+  // Metric divisions, in real-world METERS per division. Tuned so a 1:100
+  // bar reads "0 1 2 3 4 m" at the standard 4-division layout.
+  const METRIC_STANDARD_M = {
+    '1:10':  0.25,
+    '1:20':  0.5,
+    '1:50':  1,
+    '1:100': 1,
+    '1:200': 2,
+    '1:500': 5,
+  };
+
+  const ipf = paperInchesPerFoot({ titleBlock: { scale: scaleKey } });
   const divs = 4;
-  // Reserve ~0.7" on the right for the "FEET" label + a small gap. The
-  // tick marks at the very ends are aligned-left/-right so they don't
-  // need extra clearance.
   const reservedForLabel = 0.7;
   const maxBarIn = Math.max(0.6, (availableInches || 4) - reservedForLabel);
-  let feetPerDiv = STANDARD[scaleKey] != null ? STANDARD[scaleKey] : 4;
+
+  if (state.units === "metric" && METRIC_SCALES[scaleKey] !== undefined) {
+    let metersPerDiv = METRIC_STANDARD_M[scaleKey] != null ? METRIC_STANDARD_M[scaleKey] : 1;
+    // Convert m → ft for the bar-width math (paperInchesPerFoot is in ft).
+    let feetPerDiv = (metersPerDiv * 1000) * MM_TO_FT;
+    while (metersPerDiv > 0.05 && divs * feetPerDiv * ipf > maxBarIn) {
+      metersPerDiv /= 2;
+      feetPerDiv = (metersPerDiv * 1000) * MM_TO_FT;
+    }
+    return { divs, feetPerDiv, valuePerDiv: metersPerDiv, metric: true };
+  }
+
+  let feetPerDiv = IMPERIAL_STANDARD[scaleKey] != null ? IMPERIAL_STANDARD[scaleKey] : 4;
   while (feetPerDiv > 0.125 && divs * feetPerDiv * ipf > maxBarIn) {
     feetPerDiv = feetPerDiv / 2;
   }
-  return { divs, feetPerDiv };
+  return { divs, feetPerDiv, valuePerDiv: feetPerDiv, metric: false };
 }
 
-// Compact foot label for scale-bar ticks: integer feet print as "12", half
-// feet as a 6" mark to keep small scales readable.
+// Compact tick label. Imperial: integer feet print as "12", half feet as a
+// 6" mark. Metric: integer meters as "3", sub-meter as "0.5".
 function formatScaleFeet(feet) {
   if (Math.abs(feet - Math.round(feet)) < 1e-6) return String(Math.round(feet));
   if (Math.abs(feet * 2 - Math.round(feet * 2)) < 1e-6) {
@@ -895,6 +948,11 @@ function formatScaleFeet(feet) {
     return whole === 0 ? "6\"" : `${whole}'-6"`;
   }
   return feet.toFixed(2);
+}
+
+function formatScaleMeters(meters) {
+  if (Math.abs(meters - Math.round(meters)) < 1e-6) return String(Math.round(meters));
+  return meters.toFixed(1).replace(/\.0$/, "");
 }
 
 // World-space bounding box of every shape that's visible on the given
@@ -1371,6 +1429,12 @@ function captureAllSheetsForPrint(dpi) {
 
       render();
 
+      // Watermark unpaid exports — drawn after the sheet renders so the
+      // diagonal "DRAFT" pattern + logo land on top of every shape and
+      // title-block element. Bakes into the captured PNG so it survives
+      // the trip through window.print().
+      drawExportWatermark(pw, ph);
+
       pages.push({
         dataUrl: canvas.toDataURL("image/png"),
         widthIn: dim.w,
@@ -1401,6 +1465,73 @@ function captureAllSheetsForPrint(dpi) {
     render();
   }
   return pages;
+}
+
+// ==============================================================================
+// Export watermark — applied to PDF exports for visitors without an active
+// "base" entitlement. The goal isn't DRM (the JS is right there for anyone
+// who wants to bypass it); it's making sure the export can't be passed off
+// as a finished drawing — a building inspector or contractor seeing the
+// diagonal "DRAFT" tile would never accept it.
+//
+// state.paid is set by js/auth.js after a successful Supabase entitlement
+// check. Anything else — file://, offline, unauthenticated, network error,
+// SDK load failure — leaves state.paid === false, so the watermark applies.
+// ==============================================================================
+
+const WATERMARK_LABEL = "DRAFT — easydraftonline.com";
+const WATERMARK_LOGO_SRC = "images/logo_transparent_background.png";
+let watermarkLogoEl = null;
+
+function ensureWatermarkLogo() {
+  if (watermarkLogoEl) return watermarkLogoEl;
+  watermarkLogoEl = new Image();
+  // Same-origin asset (or local file in file:// mode) — no CORS concern.
+  watermarkLogoEl.src = WATERMARK_LOGO_SRC;
+  return watermarkLogoEl;
+}
+
+function drawExportWatermark(canvasW, canvasH) {
+  if (state.paid) return;
+
+  const logo = ensureWatermarkLogo();
+
+  // Center logo first so the diagonal text overlays it — keeps the brand
+  // reading clearly without burying the text. If the image hasn't loaded
+  // yet (slow disk on a fresh page-load export), the text-only watermark
+  // still does the job on its own.
+  if (logo && logo.complete && logo.naturalWidth > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    const target = Math.min(canvasW, canvasH) * 0.55;
+    const aspect = logo.naturalWidth / logo.naturalHeight;
+    let lw, lh;
+    if (aspect >= 1) { lw = target; lh = target / aspect; }
+    else             { lh = target; lw = target * aspect; }
+    ctx.drawImage(logo, (canvasW - lw) / 2, (canvasH - lh) / 2, lw, lh);
+    ctx.restore();
+  }
+
+  // Tiled diagonal "DRAFT — easydraftonline.com" stripes. Sized as a
+  // fraction of the smaller paper dimension so the watermark scales with
+  // the page (Letter / Tabloid / Arch D all read the same).
+  ctx.save();
+  const fontPx = Math.max(36, Math.round(Math.min(canvasW, canvasH) * 0.075));
+  ctx.font = `900 ${fontPx}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  ctx.fillStyle = "rgba(220, 38, 38, 0.32)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.translate(canvasW / 2, canvasH / 2);
+  ctx.rotate(-Math.PI / 6);
+
+  const lineGap = fontPx * 2.4;
+  const diag = Math.hypot(canvasW, canvasH);
+  const lines = Math.ceil(diag / lineGap) + 2;
+  for (let i = -lines; i <= lines; i++) {
+    ctx.fillText(WATERMARK_LABEL, 0, i * lineGap);
+  }
+  ctx.restore();
 }
 
 // ==============================================================================
@@ -1533,10 +1664,11 @@ function planWheel(e) {
 
   const sheet = activeSheet();
   if (!sheet) return;
-  const sortedKeys = Object.keys(ARCH_SCALES).sort((a, b) => ARCH_SCALES[a] - ARCH_SCALES[b]);
+  const tbl = activeScaleTable();
+  const sortedKeys = Object.keys(tbl).sort((a, b) => tbl[a] - tbl[b]);
   const currentKey = sheet.titleBlock && sheet.titleBlock.scale;
   let curIdx = sortedKeys.indexOf(currentKey);
-  if (curIdx === -1) curIdx = sortedKeys.indexOf('1/4" = 1\'-0"');
+  if (curIdx === -1) curIdx = sortedKeys.indexOf(defaultScaleKey());
   const newIdx = Math.max(0, Math.min(sortedKeys.length - 1, curIdx + dir));
   if (newIdx === curIdx) return;
 
@@ -2018,8 +2150,10 @@ const PAPER_SIZE_LABELS = {
   "A0": "A0 — 841 × 1189 mm",
 };
 
-// Populate dropdowns once at startup. Options are static — re-rendering on
-// every sheet switch would just thrash the DOM and lose focus / typing.
+// Populate dropdowns. Paper sizes are unit-agnostic (ARCH-D is ARCH-D in any
+// unit) so they're populated once. Scales are unit-specific (ARCH_SCALES vs.
+// METRIC_SCALES), so populateScaleSelect() is re-callable from
+// applyUnitsToUI() when the user toggles units.
 function populateSheetPropertyOptions() {
   if (propPaperSizeSel && !propPaperSizeSel.options.length) {
     for (const key of Object.keys(PAPER_SIZES)) {
@@ -2029,13 +2163,20 @@ function populateSheetPropertyOptions() {
       propPaperSizeSel.appendChild(opt);
     }
   }
-  if (propScaleSel && !propScaleSel.options.length) {
-    for (const key of Object.keys(ARCH_SCALES)) {
-      const opt = document.createElement("option");
-      opt.value = key;
-      opt.textContent = key;
-      propScaleSel.appendChild(opt);
-    }
+  populateScaleSelect();
+}
+
+function populateScaleSelect() {
+  if (!propScaleSel) return;
+  const table = activeScaleTable();
+  // Replace contents — saved sheets may carry a key from the other unit
+  // system; if so, we still want the active set in the dropdown.
+  propScaleSel.innerHTML = "";
+  for (const key of Object.keys(table)) {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = key;
+    propScaleSel.appendChild(opt);
   }
 }
 
@@ -2055,7 +2196,8 @@ function renderSheetProperties() {
   }
   if (propScaleSel && document.activeElement !== propScaleSel) {
     const scale = sheet.titleBlock?.scale;
-    propScaleSel.value = (scale && (scale in ARCH_SCALES)) ? scale : '1/4" = 1\'-0"';
+    const tbl = activeScaleTable();
+    propScaleSel.value = (scale && (scale in tbl)) ? scale : defaultScaleKey();
   }
   if (propTextScaleSel && document.activeElement !== propTextScaleSel) {
     const ts = sheetTextScale(sheet);

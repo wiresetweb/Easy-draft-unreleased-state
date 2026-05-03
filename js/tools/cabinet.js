@@ -6,29 +6,54 @@
 // ==============================================================================
 
 // ---------- Cabinet builder preview ----------
-// ---------- Cabinet builder preview ----------
+//
+// Two visual stages, gated on how many real (committed) points the user has
+// placed so far:
+//
+//   • 0 points — nothing to preview yet; the cursor's normal hover tint is
+//     enough.
+//   • 1 point  — only a dashed centerline from the placed node to the
+//     snapped cursor, plus the node dot. NO body rendering: with one node
+//     there's no path direction, so we can't honestly say which side the
+//     cabinet runs on. Showing a body here was the source of the "cabinet
+//     shot the wrong way" surprise — better to wait.
+//   • 2+ points — full preview with the offset body in cb.side, including
+//     the in-progress segment to the cursor (phantom point).
 function drawCabinetPreview() {
   const cb = state.cabinetBuilder;
   if (!cb) return;
-  const points = cb.points.slice();
-  if (points.length === 0) return;
+  if (cb.points.length === 0) return;
 
-  // Add a "phantom" final node at the snapped cursor so the user sees the
-  // segment they're about to commit. We only add it if the cursor is over
-  // the canvas (not over the modal). Snap mirrors what placeCabinetPoint
-  // does on click — endpoint → wall projection → grid — so the preview is
-  // honest about where the click would land.
   const cursorOverCanvas = isCursorOverCanvas();
-  if (cursorOverCanvas) {
-    const last = points[points.length - 1];
-    const snapped = snapCabinetClickToWall(state.cursorWorld);
-    if (Math.hypot(snapped.point.x - last.x, snapped.point.y - last.y) > 1e-6) {
-      points.push({ x: snapped.point.x, y: snapped.point.y });
-    }
-  }
 
-  if (points.length >= 2) {
+  if (cb.points.length >= 2) {
+    // Existing behavior — add a phantom point at the snapped cursor so the
+    // user sees the segment they're about to commit, then draw the full
+    // cabinet body with the current side.
+    const points = cb.points.slice();
+    if (cursorOverCanvas) {
+      const last = points[points.length - 1];
+      const snapped = snapCabinetClickToWall(state.cursorWorld);
+      if (Math.hypot(snapped.point.x - last.x, snapped.point.y - last.y) > 1e-6) {
+        points.push({ x: snapped.point.x, y: snapped.point.y });
+      }
+    }
     drawCabinetPath(points, cb.depth, cb.side, MEASURE_COLOR, 0.55, cb.layerId);
+  } else if (cursorOverCanvas) {
+    // Exactly one committed point — rubber-band centerline to the cursor.
+    const p1 = cb.points[0];
+    const snapped = snapCabinetClickToWall(state.cursorWorld);
+    const a = worldToScreen(p1.x, p1.y);
+    const b = worldToScreen(snapped.point.x, snapped.point.y);
+    ctx.save();
+    ctx.strokeStyle = "rgba(232, 96, 44, 0.7)";
+    ctx.setLineDash([6, 4]);
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(a.x + 0.5, a.y + 0.5);
+    ctx.lineTo(b.x + 0.5, b.y + 0.5);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // Node dots so each committed corner is visible.
@@ -43,19 +68,19 @@ function drawCabinetPreview() {
     ctx.fill();
     ctx.stroke();
   }
+  ctx.restore();
 
-  // Length label on the in-progress segment.
-  if (cursorOverCanvas && points.length >= 2) {
-    const last = points[points.length - 1];
-    const prev = points[points.length - 2];
-    const lenFt = Math.hypot(last.x - prev.x, last.y - prev.y);
-    if (lenFt > 0) {
-      const sp = worldToScreen(last.x, last.y);
+  // Length label on the in-progress segment — drawn for both stages so the
+  // user always sees how far the next click would extend the run.
+  if (cursorOverCanvas) {
+    const last = cb.points[cb.points.length - 1];
+    const snapped = snapCabinetClickToWall(state.cursorWorld);
+    const lenFt = Math.hypot(snapped.point.x - last.x, snapped.point.y - last.y);
+    if (lenFt > 1e-6) {
+      const sp = worldToScreen(snapped.point.x, snapped.point.y);
       drawCursorLabel(formatFeet(lenFt), sp, "rgba(232, 96, 44, 0.95)");
     }
   }
-
-  ctx.restore();
 }
 
 // The cabinet modal sits on top of the canvas — clicks on it shouldn't add
@@ -89,9 +114,22 @@ function bindCabinetModal() {
   });
   cabinetDepthInput.addEventListener("blur", applyCabinetDepthInput);
 
+  if (cabinetFlipBtn) cabinetFlipBtn.addEventListener("click", flipCabinetSide);
+
   // Swallow pointerdowns on the modal so clicks on "Finish" / inputs never
   // also register as a cabinet-builder canvas click.
   cabinetModal.addEventListener("pointerdown", (e) => e.stopPropagation());
+}
+
+// Flip the cabinet body to the opposite side of the path. Marks userFlipped
+// so the auto-detect that runs at the second-click commit doesn't immediately
+// reverse the user's choice.
+function flipCabinetSide() {
+  const cb = state.cabinetBuilder;
+  if (!cb) return;
+  cb.side = -cb.side;
+  cb.userFlipped = true;
+  render();
 }
 
 function applyCabinetDepthInput() {
@@ -122,6 +160,10 @@ function startCabinetBuilder() {
     // to figure out which side of the path the user clicked from once the
     // path direction is known at the second click.
     firstClickWorld: null,
+    // Has the user manually pressed "Flip Side" (or F) since starting? If
+    // so, the second-click auto-detect is suppressed — we trust the user's
+    // explicit pick over the inferred one.
+    userFlipped: false,
   };
   setTool("cabinet");
   cabinetDepthInput.value = formatFeet(DEFAULT_CABINET_DEPTH_FT);
@@ -255,7 +297,10 @@ function placeCabinetPoint(wp) {
     return;
   }
   cb.points.push({ x: snapped.point.x, y: snapped.point.y });
-  if (cb.points.length === 2 && cb.firstClickWorld) {
+  // First time we have a path direction — auto-seed the side from where the
+  // user originally clicked. Skipped if the user has manually flipped at
+  // any point since the build started; their pick wins.
+  if (cb.points.length === 2 && cb.firstClickWorld && !cb.userFlipped) {
     const p1 = cb.points[0], p2 = cb.points[1];
     const dx = p2.x - p1.x, dy = p2.y - p1.y;
     const len = Math.hypot(dx, dy);

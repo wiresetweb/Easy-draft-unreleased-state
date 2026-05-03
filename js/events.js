@@ -94,9 +94,13 @@ function bindEvents() {
   });
 
   gridSizeInput.addEventListener("input", () => {
-    const v = parseFloat(gridSizeInput.value);
-    if (!isFinite(v) || v < 0.1) return;
-    state.gridSize = v;
+    const raw = parseFloat(gridSizeInput.value);
+    if (!isFinite(raw)) return;
+    // The input is whatever the current display unit is; convert to feet for
+    // storage. Floor at ~15 mm so neither unit can drive snap math to zero.
+    const ft = state.units === "metric" ? raw * MM_TO_FT : raw;
+    if (ft < 0.05) return;
+    state.gridSize = ft;
     render();
   });
   snapToggle.addEventListener("change", () => {
@@ -413,6 +417,15 @@ function bindEvents() {
     if (ctrl) return;
 
     const k = e.key.toLowerCase();
+
+    // Cabinet builder side flip — only active while the builder is up so it
+    // doesn't shadow a future tool shortcut on F.
+    if (k === "f" && state.cabinetBuilder) {
+      flipCabinetSide();
+      e.preventDefault();
+      return;
+    }
+
     if (k === "v") setTool("select");
     else if (k === "l") setTool("line");
     else if (k === "b") setTool("box");
