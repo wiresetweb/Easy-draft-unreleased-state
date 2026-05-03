@@ -2155,14 +2155,12 @@ body.demo-mode #layer-hint-modal {
 .tour-card-next:active { transform: translateY(1px); }
 
 /* Glow around whatever element the current step is asking the user to
-   interact with. Doesn't change the element's layout — just paints over
-   it with a pulsing orange halo. The halo is intentionally tight (no big
-   blur radius spilling beyond the click target) — testers were clicking
-   inside the glow but outside the actual element when the bloom was
-   too generous. */
+   interact with. Uses outline + box-shadow ONLY — no `position` or
+   `z-index` here. Setting `position: relative` would override the
+   `position: absolute` on already-floating targets like .palette-panel
+   and yank them into normal flow, sending them off-screen. The outline
+   is visible regardless of stacking context. */
 .tour-target {
-  position: relative;
-  z-index: 5;
   border-radius: var(--radius-sm);
   outline: 2px solid var(--accent);
   outline-offset: 1px;
