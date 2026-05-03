@@ -2156,23 +2156,24 @@ body.demo-mode #layer-hint-modal {
 
 /* Glow around whatever element the current step is asking the user to
    interact with. Doesn't change the element's layout — just paints over
-   it with a pulsing orange halo. */
+   it with a pulsing orange halo. The halo is intentionally tight (no big
+   blur radius spilling beyond the click target) — testers were clicking
+   inside the glow but outside the actual element when the bloom was
+   too generous. */
 .tour-target {
   position: relative;
   z-index: 5;
   border-radius: var(--radius-sm);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
   animation: tour-target-pulse 1.6s ease-in-out infinite;
 }
 @keyframes tour-target-pulse {
   0%, 100% {
-    box-shadow:
-      0 0 0 3px rgba(232, 96, 44, 0.55),
-      0 0 18px rgba(232, 96, 44, 0.45);
+    box-shadow: 0 0 0 2px rgba(232, 96, 44, 0.30);
   }
   50% {
-    box-shadow:
-      0 0 0 5px rgba(232, 96, 44, 0.85),
-      0 0 32px rgba(232, 96, 44, 0.70);
+    box-shadow: 0 0 0 4px rgba(232, 96, 44, 0.55);
   }
 }
 
