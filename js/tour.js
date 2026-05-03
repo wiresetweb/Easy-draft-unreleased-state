@@ -82,10 +82,17 @@ function tourStepList() {
       advance: () => tourCountShapesOnLayerName("Walls") > (tourSnapshot.wallCount || 0),
     },
     {
+      id: "pick-select",
+      title: "Switch to the Select tool",
+      copy: "To edit anything you've drawn, you need the Select tool. Click 'Select' on the left toolbar (or press V).",
+      anchor: () => document.querySelector('.tool[data-tool="select"]'),
+      advance: () => state.tool === "select",
+    },
+    {
       id: "select-wall",
       title: "Click your wall",
-      copy: "Press V (or click the Select tool), then click the wall you just drew. The little popup that appears IS the editor — most objects in Easy Draft work this way: click to edit.",
-      anchor: () => document.querySelector('.tool[data-tool="select"]'),
+      copy: "Now click directly on the wall you just drew. A little popup will appear right next to it — that IS the editor. Most objects in Easy Draft work this way: click to edit.",
+      anchor: null,
       advance: () => {
         if (state.selection.size !== 1) return false;
         const id = [...state.selection][0];
@@ -117,10 +124,17 @@ function tourStepList() {
     {
       id: "switch-layer",
       title: "Switch layers",
-      copy: "Layers do two things: they organize your drawing AND they swap your toolset. Click the 'Windows & Doors' row in the layer panel on the right.",
+      copy: "Layers do two things: they organize your drawing AND they swap your toolset. Click the words 'Windows & Doors' in the layer panel on the right (don't tap the eye or color dot — those just toggle visibility / color).",
       anchor: () => {
         const sub = tourFindSublayerByName("Windows & Doors");
-        return sub ? document.querySelector(`.sub-row[data-sub-id="${sub.id}"]`) : null;
+        if (!sub) return null;
+        const row = document.querySelector(`.sub-row[data-sub-id="${sub.id}"]`);
+        if (!row) return null;
+        // Anchor to the layer-name span specifically — the row-wide glow
+        // misled testers into clicking the eye icon, which only toggles
+        // visibility. The name span is the click target that switches the
+        // active layer.
+        return row.querySelector(".sub-name") || row;
       },
       advance: () => {
         const sub = activeSublayer();
@@ -132,7 +146,13 @@ function tourStepList() {
       title: "Drag a door onto your wall",
       copy: "The right panel is now a door catalog instead of the layer tree — that's what switching layers gets you. Drag any door onto your wall; Easy Draft snaps it to the centerline and splits the wall at the opening for you.",
       anchor: () => document.getElementById("palette-panel"),
-      enter: () => { tourSnapshot.doorCount = tourCountShapesByType("door"); },
+      enter: () => {
+        tourSnapshot.doorCount = tourCountShapesByType("door");
+        // Defensive: if step 6 advanced because state.activeSublayerId was
+        // already on Windows & Doors (e.g. the user replayed the tour), the
+        // palette panel may not have been re-rendered. Force-sync now.
+        if (typeof updatePaletteVisibility === "function") updatePaletteVisibility();
+      },
       advance: () => tourCountShapesByType("door") > (tourSnapshot.doorCount || 0),
     },
     {
