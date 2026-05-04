@@ -384,7 +384,9 @@ function customFurnitureIconSvg(item) {
       const rr = Math.max(0, Math.min(rw / 2, rh / 2, (p.r || 0) * scale));
       body += `<rect x="${x}" y="${y}" width="${rw}" height="${rh}" rx="${rr}" stroke-width="1.1"/>`;
     } else if (p.type === "circle") {
-      body += `<circle cx="${p.cx*scale+cx}" cy="${p.cy*scale+cy}" r="${p.r*scale}" stroke-width="1.1"/>`;
+      const rx = (p.rx || p.r || 0) * scale;
+      const ry = (p.ry || p.r || 0) * scale;
+      body += `<ellipse cx="${p.cx*scale+cx}" cy="${p.cy*scale+cy}" rx="${rx}" ry="${ry}" stroke-width="1.1"/>`;
     }
   }
   return `<svg viewBox="0 0 48 26" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -530,10 +532,43 @@ function renderPalette() {
       name.className = "palette-item-name";
       name.textContent = paletteItemDisplayName(item);
       itemEl.appendChild(name);
+
+      // Custom-built furniture pieces get an Edit pencil that re-opens
+      // the builder pre-loaded with the piece. Click is wired in the
+      // palette-body click handler so we can stop drag-to-place from
+      // also firing on the same click.
+      if (item.kind === "custom" && item.customId) {
+        const editBtn = document.createElement("button");
+        editBtn.className = "palette-item-edit";
+        editBtn.dataset.editId = item.customId;
+        editBtn.title = `Edit ${item.name}`;
+        editBtn.setAttribute("aria-label", `Edit ${item.name}`);
+        editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
+        itemEl.appendChild(editBtn);
+      }
+
       content.appendChild(itemEl);
     }
 
     section.appendChild(content);
+
+    // Export button for the Furniture section so the user can dump the
+    // whole library to disk in one go after a session of building /
+    // editing — far less tedious than the old per-save auto-download.
+    if (sectionKey === "furniture") {
+      const footer = document.createElement("div");
+      footer.className = "palette-section-footer";
+      const lib = Array.isArray(window.CUSTOM_FURNITURE_LIBRARY) ? window.CUSTOM_FURNITURE_LIBRARY : [];
+      const count = lib.length;
+      footer.innerHTML = `
+        <button class="palette-tool-btn palette-export-btn" data-palette-action="export-custom-furniture" ${count === 0 ? "disabled" : ""}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Export library${count ? ` (${count})` : ""}</span>
+        </button>
+      `;
+      section.appendChild(footer);
+    }
+
     paletteBody.appendChild(section);
   }
 }
@@ -653,6 +688,17 @@ function bindPalettePanel() {
 
   // Section toggles + item drag-place
   paletteBody.addEventListener("click", (e) => {
+    const editBtn = e.target.closest(".palette-item-edit");
+    if (editBtn) {
+      e.stopPropagation();
+      openFurnitureBuilder({ editId: editBtn.dataset.editId });
+      return;
+    }
+    const action = e.target.closest("[data-palette-action]");
+    if (action && action.dataset.paletteAction === "export-custom-furniture") {
+      downloadCustomFurnitureFile(window.CUSTOM_FURNITURE_LIBRARY || []);
+      return;
+    }
     const toolBtn = e.target.closest(".palette-tool-btn");
     if (toolBtn) {
       const id = toolBtn.dataset.paletteTool;
@@ -670,6 +716,9 @@ function bindPalettePanel() {
   });
 
   paletteBody.addEventListener("pointerdown", (e) => {
+    // Edit pencil and Export footer should not start a drag-to-place.
+    if (e.target.closest(".palette-item-edit")) return;
+    if (e.target.closest("[data-palette-action]")) return;
     const item = e.target.closest(".palette-item");
     if (!item) return;
     const sectionKey = item.dataset.section;

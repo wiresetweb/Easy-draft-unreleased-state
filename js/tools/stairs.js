@@ -84,7 +84,7 @@ function snapStairsStartToWall(start, angle, width) {
   return { x: start.x + n.x * bestShift, y: start.y + n.y * bestShift };
 }
 
-function buildStairsSegments(start, angle, params) {
+async function buildStairsSegments(start, angle, params) {
   const { width, rise, run, ceilingHeight } = params;
   const numSteps = Math.max(1, Math.ceil(ceilingHeight / rise));
   const totalRun = numSteps * run;
@@ -155,9 +155,16 @@ function buildStairsSegments(start, angle, params) {
   } else if (rightHit) {
     turnDir = "left";
   } else {
-    const choice = prompt("Both sides are open at the landing. Turn LEFT or RIGHT?", "left");
-    if (!choice) return { success: false, message: "Cancelled." };
-    turnDir = choice.trim().toLowerCase().startsWith("r") ? "right" : "left";
+    // Both sides open at the landing — let the user pick. The dialog's
+    // "primary" button is treated as Right and "cancel" (which is the
+    // visual left button here) as Left, with Esc treated the same as
+    // Left to keep the choice undestructive.
+    const goRight = await appConfirm("Both sides are open at the landing — which way should the stairs turn?", {
+      title: "Stair turn direction",
+      cancelLabel: "Turn left",
+      confirmLabel: "Turn right",
+    });
+    turnDir = goRight ? "right" : "left";
   }
 
   const newU = turnDir === "left" ? leftPerp : rightPerp;
@@ -301,7 +308,7 @@ function cancelStairs() {
   render();
 }
 
-function buildAndPlaceStairs() {
+async function buildAndPlaceStairs() {
   if (!state.stairsDirection) { hideStairsModal(); return; }
 
   const ceiling = parseFeet(stairsCeilingInput.value);
@@ -310,21 +317,24 @@ function buildAndPlaceStairs() {
   const width = parseFeet(stairsWidthInput.value);
 
   if (!ceiling || !rise || !run || !width || ceiling <= 0 || rise <= 0 || run <= 0 || width <= 0) {
-    alert("Please provide valid values for all fields.");
+    await appAlert("Provide valid feet/inch values for ceiling, rise, run, and width.", { title: "Invalid stair dimensions" });
     return;
   }
 
   const { start: rawStart, angle } = state.stairsDirection;
   const start = snapStairsStartToWall(rawStart, angle, width);
-  const result = buildStairsSegments(start, angle, { width, rise, run, ceilingHeight: ceiling });
+  const result = await buildStairsSegments(start, angle, { width, rise, run, ceilingHeight: ceiling });
 
   if (!result.success) {
-    alert(result.message);
+    await appAlert(result.message, { title: "Couldn't build stairs" });
     return;
   }
 
   const layer = activeSublayer();
-  if (!layer) { alert("No active layer to place stairs on."); return; }
+  if (!layer) {
+    await appAlert("Switch to a layer before placing stairs.", { title: "No active layer" });
+    return;
+  }
 
   pushHistory();
   const shape = {

@@ -1820,16 +1820,22 @@ function addSheet() {
   return sheet;
 }
 
-function removeSheet(id) {
+async function removeSheet(id) {
   if (!Array.isArray(state.sheets)) return;
   if (state.sheets.length <= 1) {
-    alert("You can't delete the last page.\n\nAdd another page first if you want to remove this one.");
+    await appAlert("Add another page first if you want to remove this one.", {
+      title: "Can't delete the last page",
+    });
     return;
   }
   const idx = state.sheets.findIndex((s) => s.id === id);
   if (idx === -1) return;
   const target = state.sheets[idx];
-  const ok = confirm(`Delete "${target.number} — ${target.name}"?`);
+  const ok = await appConfirm(`This will remove ${target.number || target.name} from the sheet set.`, {
+    title: `Delete "${target.number} — ${target.name}"?`,
+    confirmLabel: "Delete",
+    danger: true,
+  });
   if (!ok) return;
   state.sheets.splice(idx, 1);
   if (state.activeSheetId === id) {
@@ -1847,10 +1853,13 @@ function togglePageOutline(id) {
   render();
 }
 
-function renameSheet(id) {
+async function renameSheet(id) {
   const sheet = state.sheets.find((s) => s.id === id);
   if (!sheet) return;
-  const name = prompt("Page name:", sheet.name);
+  const name = await appPrompt("Page name:", sheet.name, {
+    title: "Rename page",
+    confirmLabel: "Rename",
+  });
   if (name === null) return;
   const trimmed = name.trim();
   if (!trimmed) return;
