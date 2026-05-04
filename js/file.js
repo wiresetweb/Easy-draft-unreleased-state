@@ -185,6 +185,7 @@ async function fileNew() {
   state.fileName = null;
   state.sheets = [];
   state.activeSheetId = null;
+  if (typeof clearCachedDocument === "function") clearCachedDocument();
   addStory();
   ensureSheets();
   resetPlanView();
@@ -216,6 +217,7 @@ async function fileOpen() {
         state.fileHandle = handle;
         state.fileName = handle.name;
         updateFileLabel();
+        if (typeof scheduleCacheSave === "function") scheduleCacheSave();
       }
     } catch (err) {
       // User cancelled the picker — silent. Anything else is a real error.
@@ -240,6 +242,7 @@ async function fileOpen() {
         state.fileHandle = null;
         state.fileName = file.name;
         updateFileLabel();
+        if (typeof scheduleCacheSave === "function") scheduleCacheSave();
       }
     } catch (err) {
       console.error(err);

@@ -27,6 +27,7 @@ function pushHistory() {
   state.history.push(snapshot());
   if (state.history.length > MAX_HISTORY) state.history.shift();
   state.future.length = 0;
+  if (typeof scheduleCacheSave === "function") scheduleCacheSave();
 }
 
 function restore(snap) {
@@ -67,6 +68,7 @@ function undo() {
   state.future.push(snapshot());
   restore(state.history.pop());
   render();
+  if (typeof scheduleCacheSave === "function") scheduleCacheSave();
 }
 
 function redo() {
@@ -74,4 +76,5 @@ function redo() {
   state.history.push(snapshot());
   restore(state.future.pop());
   render();
+  if (typeof scheduleCacheSave === "function") scheduleCacheSave();
 }
