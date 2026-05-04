@@ -400,9 +400,17 @@
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/></svg>
               <span>Circle</span>
             </button>
+            <button class="builder-tool" data-tool="text" title="Text label (T)">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14M12 5v14"/></svg>
+              <span>Text</span>
+            </button>
             <span class="builder-divider"></span>
             <button class="btn-mini" id="furniture-builder-delete" title="Delete selected (Del)">Delete</button>
             <button class="btn-mini" id="furniture-builder-clear" title="Remove all primitives">Clear</button>
+            <span class="builder-divider"></span>
+            <button class="btn-mini" id="furniture-builder-zoom-out" title="Zoom out">&minus;</button>
+            <span class="builder-zoom-readout" id="furniture-builder-zoom-readout" title="Reset view (0)">100%</span>
+            <button class="btn-mini" id="furniture-builder-zoom-in" title="Zoom in">+</button>
             <span class="builder-flex"></span>
             <span class="builder-readout" id="furniture-builder-readout">0", 0"</span>
           </div>
@@ -534,6 +542,7 @@
   <script src="js/tools/furniture-builder.js"></script>
   <script src="js/plan-view.js"></script>
   <script src="js/file.js"></script>
+  <script src="js/cache.js"></script>
   <script src="js/events.js"></script>
   <script src="js/tour.js"></script>
   <script src="js/main.js"></script>

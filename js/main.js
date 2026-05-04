@@ -9,7 +9,11 @@ function init() {
   // Pull the saved unit system before anything that reads it (layer tree
   // shows formatted dimensions, palette renders names, etc.).
   loadSavedUnits();
-  addStory();
+  // Restore an in-progress drawing from localStorage if one exists, so an
+  // accidental refresh doesn't lose work. addStory() seeds a fresh document
+  // only when there's nothing cached to restore.
+  const restored = (typeof tryRestoreCachedDocument === "function") && tryRestoreCachedDocument();
+  if (!restored) addStory();
   bindEvents();
   fitCanvas();
   centerView();
@@ -53,6 +57,12 @@ function init() {
   // to wait on the image — the export pipeline tolerates a missing image
   // anyway, but this gives us the brand mark on the very first PDF.
   ensureWatermarkLogo();
+  // If we restored from cache, refresh the brand label so it shows the
+  // cached file name. applyUnitsToUI() above already repainted the rest.
+  if (restored) updateFileLabel();
+  // Start the periodic + unload-flush autosave once the rest of init has
+  // settled — pushHistory hooks already cover the debounced path.
+  if (typeof startCacheAutosave === "function") startCacheAutosave();
   render();
 
   // First-time-user walkthrough. No-op if the visitor has already seen it

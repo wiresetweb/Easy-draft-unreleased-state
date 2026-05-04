@@ -314,6 +314,22 @@ function drawCustomFurnitureInterior(sh, c, scale) {
   ctx.lineWidth = 1.4;
   ctx.strokeStyle = c;
   for (const p of prims) {
+    if (p.type === "text") {
+      // Text primitives are filled rather than stroked, and they don't
+      // participate in the beginPath cycle the others use.
+      const sizePx = Math.max(2, (p.sizeFt || 1 / 3) * scale);
+      ctx.save();
+      ctx.fillStyle = c;
+      const fontFamily = (typeof DEFAULT_TEXT_FONT_FAMILY !== "undefined")
+        ? DEFAULT_TEXT_FONT_FAMILY
+        : "system-ui, sans-serif";
+      ctx.font = `${sizePx}px ${fontFamily}`;
+      ctx.textAlign = p.align || "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(p.text || "", p.x * scale, p.y * scale);
+      ctx.restore();
+      continue;
+    }
     ctx.beginPath();
     if (p.type === "line") {
       ctx.moveTo(p.x1 * scale, p.y1 * scale);
