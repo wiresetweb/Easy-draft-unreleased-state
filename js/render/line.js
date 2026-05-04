@@ -2,6 +2,39 @@
 
 // drawLineShape
 
+// Per-render cache of every visible thick wall shape. Built once at the
+// top of drawAllShapes() and cleared after, so the geometry helpers below
+// (trimThinEndpointAtWall, findCrossingBreaksTo, findTConnectionsTo,
+// findThroughWallAt, findAdjacentThickWall) don't each walk
+// state.stories × sublayers.shapes from scratch on every line they draw.
+//
+// All five used to be O(N × M) per frame: every thin line × every wall
+// scanned every render. With N=100 thin lines and M=200 walls that's
+// 20k segment-vs-wall checks per pan / zoom / nudge frame. The cache
+// turns the scan into a single linear pass.
+let _thickWallCache = null;
+
+function _computeThickWalls() {
+  const list = [];
+  for (const story of state.stories) {
+    if (!story.visible) continue;
+    for (const sub of story.sublayers) {
+      if (sub.name !== WALL_LAYER_NAME || !sub.visible) continue;
+      for (const sh of sub.shapes) {
+        if (sh.type === "line" && sh.thickness) list.push(sh);
+      }
+    }
+  }
+  return list;
+}
+
+function thickWallList() {
+  return _thickWallCache || _computeThickWalls();
+}
+
+function beginThickWallCache() { _thickWallCache = _computeThickWalls(); }
+function endThickWallCache()   { _thickWallCache = null; }
+
 function drawLineShape(sh, color) {
   if (sh.thickness && sh.thickness > 0) {
     drawWallLineShape(sh, color);
@@ -49,35 +82,28 @@ function trimThinEndpointAtWall(px, py, qx, qy) {
   if (dLen2 < 1e-12) return null;
   let bestS = 0;
   let hit = false;
-  for (const story of state.stories) {
-    if (!story.visible) continue;
-    for (const sub of story.sublayers) {
-      if (sub.name !== WALL_LAYER_NAME || !sub.visible) continue;
-      for (const W of sub.shapes) {
-        if (W.type !== "line" || !W.thickness) continue;
-        const wdx = W.x2 - W.x1, wdy = W.y2 - W.y1;
-        const wLen2 = wdx * wdx + wdy * wdy;
-        if (wLen2 < 1e-12) continue;
-        // (px, py) on the wall's centerline iff it projects inside [0, 1]
-        // and the perpendicular distance is within tol.
-        const t = ((px - W.x1) * wdx + (py - W.y1) * wdy) / wLen2;
-        if (t < -tol || t > 1 + tol) continue;
-        const cpx = W.x1 + wdx * t, cpy = W.y1 + wdy * t;
-        if (Math.hypot(px - cpx, py - cpy) > tol) continue;
+  for (const W of thickWallList()) {
+    const wdx = W.x2 - W.x1, wdy = W.y2 - W.y1;
+    const wLen2 = wdx * wdx + wdy * wdy;
+    if (wLen2 < 1e-12) continue;
+    // (px, py) on the wall's centerline iff it projects inside [0, 1]
+    // and the perpendicular distance is within tol.
+    const t = ((px - W.x1) * wdx + (py - W.y1) * wdy) / wLen2;
+    if (t < -tol || t > 1 + tol) continue;
+    const cpx = W.x1 + wdx * t, cpy = W.y1 + wdy * t;
+    if (Math.hypot(px - cpx, py - cpy) > tol) continue;
 
-        const wLen = Math.sqrt(wLen2);
-        const nx = -wdy / wLen, ny = wdx / wLen;
-        const half = W.thickness / 2;
-        const dDotN = dDx * nx + dDy * ny;
-        if (Math.abs(dDotN) < 1e-9) continue; // line parallel to wall
-        // Move toward (qx, qy) until we've crossed by ±half along n —
-        // sign chosen so we end up on the same side as (qx, qy).
-        const sign = dDotN > 0 ? 1 : -1;
-        const s = (sign * half) / dDotN;
-        if (s <= 0 || s >= 1) continue;
-        if (s > bestS) { bestS = s; hit = true; }
-      }
-    }
+    const wLen = Math.sqrt(wLen2);
+    const nx = -wdy / wLen, ny = wdx / wLen;
+    const half = W.thickness / 2;
+    const dDotN = dDx * nx + dDy * ny;
+    if (Math.abs(dDotN) < 1e-9) continue; // line parallel to wall
+    // Move toward (qx, qy) until we've crossed by ±half along n —
+    // sign chosen so we end up on the same side as (qx, qy).
+    const sign = dDotN > 0 ? 1 : -1;
+    const s = (sign * half) / dDotN;
+    if (s <= 0 || s >= 1) continue;
+    if (s > bestS) { bestS = s; hit = true; }
   }
   if (!hit) return null;
   return { x: px + dDx * bestS, y: py + dDy * bestS };
@@ -256,23 +282,16 @@ function computeWallCorners(sh) {
 function findThroughWallAt(self, jx, jy) {
   const tol = 1e-3;
   const epsT = 1e-3;
-  for (const story of state.stories) {
-    if (!story.visible) continue;
-    for (const sub of story.sublayers) {
-      if (sub.name !== WALL_LAYER_NAME || !sub.visible) continue;
-      for (const sh of sub.shapes) {
-        if (sh === self) continue;
-        if (sh.type !== "line" || !sh.thickness) continue;
-        const dx = sh.x2 - sh.x1, dy = sh.y2 - sh.y1;
-        const len2 = dx * dx + dy * dy;
-        if (len2 < 1e-12) continue;
-        const t = ((jx - sh.x1) * dx + (jy - sh.y1) * dy) / len2;
-        if (t < epsT || t > 1 - epsT) continue;
-        const px = sh.x1 + dx * t, py = sh.y1 + dy * t;
-        if (Math.hypot(jx - px, jy - py) > tol) continue;
-        return { wall: sh, t };
-      }
-    }
+  for (const sh of thickWallList()) {
+    if (sh === self) continue;
+    const dx = sh.x2 - sh.x1, dy = sh.y2 - sh.y1;
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 1e-12) continue;
+    const t = ((jx - sh.x1) * dx + (jy - sh.y1) * dy) / len2;
+    if (t < epsT || t > 1 - epsT) continue;
+    const px = sh.x1 + dx * t, py = sh.y1 + dy * t;
+    if (Math.hypot(jx - px, jy - py) > tol) continue;
+    return { wall: sh, t };
   }
   return null;
 }
@@ -338,47 +357,40 @@ function findTConnectionsTo(B) {
   const tol = 1e-3;
   const epsT = 1e-3;
 
-  for (const story of state.stories) {
-    if (!story.visible) continue;
-    for (const sub of story.sublayers) {
-      if (sub.name !== WALL_LAYER_NAME || !sub.visible) continue;
-      for (const W of sub.shapes) {
-        if (W === B) continue;
-        if (W.type !== "line" || !W.thickness) continue;
-        for (const end of ["p1", "p2"]) {
-          const jx = end === "p1" ? W.x1 : W.x2;
-          const jy = end === "p1" ? W.y1 : W.y2;
-          const fx = end === "p1" ? W.x2 : W.x1;
-          const fy = end === "p1" ? W.y2 : W.y1;
-          // Skip exact-endpoint hits — those are L-joints, handled elsewhere.
-          if ((Math.abs(B.x1 - jx) < tol && Math.abs(B.y1 - jy) < tol) ||
-              (Math.abs(B.x2 - jx) < tol && Math.abs(B.y2 - jy) < tol)) continue;
-          const t = ((jx - B.x1) * bdx + (jy - B.y1) * bdy) / blen2;
-          if (t < epsT || t > 1 - epsT) continue;
-          const px = B.x1 + bdx * t, py = B.y1 + bdy * t;
-          if (Math.hypot(jx - px, jy - py) > tol) continue;
+  for (const W of thickWallList()) {
+    if (W === B) continue;
+    for (const end of ["p1", "p2"]) {
+      const jx = end === "p1" ? W.x1 : W.x2;
+      const jy = end === "p1" ? W.y1 : W.y2;
+      const fx = end === "p1" ? W.x2 : W.x1;
+      const fy = end === "p1" ? W.y2 : W.y1;
+      // Skip exact-endpoint hits — those are L-joints, handled elsewhere.
+      if ((Math.abs(B.x1 - jx) < tol && Math.abs(B.y1 - jy) < tol) ||
+          (Math.abs(B.x2 - jx) < tol && Math.abs(B.y2 - jy) < tol)) continue;
+      const t = ((jx - B.x1) * bdx + (jy - B.y1) * bdy) / blen2;
+      if (t < epsT || t > 1 - epsT) continue;
+      const px = B.x1 + bdx * t, py = B.y1 + bdy * t;
+      if (Math.hypot(jx - px, jy - py) > tol) continue;
 
-          const wdx = fx - jx, wdy = fy - jy;
-          const wlen = Math.hypot(wdx, wdy);
-          if (wlen < 1e-9) continue;
-          const wux = wdx / wlen, wuy = wdy / wlen;
-          const dot = wux * bnx + wuy * bny;
-          if (Math.abs(dot) < 1e-6) continue;
-          const sideSign = dot > 0 ? 1 : -1;
+      const wdx = fx - jx, wdy = fy - jy;
+      const wlen = Math.hypot(wdx, wdy);
+      if (wlen < 1e-9) continue;
+      const wux = wdx / wlen, wuy = wdy / wlen;
+      const dot = wux * bnx + wuy * bny;
+      if (Math.abs(dot) < 1e-6) continue;
+      const sideSign = dot > 0 ? 1 : -1;
 
-          const wHalf = W.thickness / 2;
-          const wnx = -wuy, wny = wux;
-          const aL = { x: jx + wnx * wHalf, y: jy + wny * wHalf };
-          const aR = { x: jx - wnx * wHalf, y: jy - wny * wHalf };
-          const nearFaceP = { x: jx + bnx * sideSign * bHalf, y: jy + bny * sideSign * bHalf };
+      const wHalf = W.thickness / 2;
+      const wnx = -wuy, wny = wux;
+      const aL = { x: jx + wnx * wHalf, y: jy + wny * wHalf };
+      const aR = { x: jx - wnx * wHalf, y: jy - wny * wHalf };
+      const nearFaceP = { x: jx + bnx * sideSign * bHalf, y: jy + bny * sideSign * bHalf };
 
-          const breakL = lineLineIntersect(aL, wux, wuy, nearFaceP, bux, buy);
-          const breakR = lineLineIntersect(aR, wux, wuy, nearFaceP, bux, buy);
-          if (!breakL || !breakR) continue;
+      const breakL = lineLineIntersect(aL, wux, wuy, nearFaceP, bux, buy);
+      const breakR = lineLineIntersect(aR, wux, wuy, nearFaceP, bux, buy);
+      if (!breakL || !breakR) continue;
 
-          out.push({ side: sideSign, p1: breakL, p2: breakR });
-        }
-      }
+      out.push({ side: sideSign, p1: breakL, p2: breakR });
     }
   }
   return out;
@@ -404,51 +416,44 @@ function findCrossingBreaksTo(B) {
   // to double-cover the same break here.
   const epsT = 1e-3;
 
-  for (const story of state.stories) {
-    if (!story.visible) continue;
-    for (const sub of story.sublayers) {
-      if (sub.name !== WALL_LAYER_NAME || !sub.visible) continue;
-      for (const W of sub.shapes) {
-        if (W === B) continue;
-        if (W.type !== "line" || !W.thickness) continue;
-        if (sharesEndpoint(W, B)) continue;
+  for (const W of thickWallList()) {
+    if (W === B) continue;
+    if (sharesEndpoint(W, B)) continue;
 
-        // Solve for centerline parameters at the intersection of the two
-        // segments. Crossings need both t and s strictly inside (0, 1).
-        const wdx = W.x2 - W.x1, wdy = W.y2 - W.y1;
-        const wlen2 = wdx * wdx + wdy * wdy;
-        if (wlen2 < 1e-12) continue;
-        const denom = wdx * bdy - wdy * bdx;
-        if (Math.abs(denom) < 1e-9) continue; // parallel — no crossing
-        const dx0 = B.x1 - W.x1, dy0 = B.y1 - W.y1;
-        const t = (dx0 * bdy - dy0 * bdx) / denom;
-        const s = (dx0 * wdy - dy0 * wdx) / denom;
-        if (t < epsT || t > 1 - epsT) continue;
-        if (s < epsT || s > 1 - epsT) continue;
+    // Solve for centerline parameters at the intersection of the two
+    // segments. Crossings need both t and s strictly inside (0, 1).
+    const wdx = W.x2 - W.x1, wdy = W.y2 - W.y1;
+    const wlen2 = wdx * wdx + wdy * wdy;
+    if (wlen2 < 1e-12) continue;
+    const denom = wdx * bdy - wdy * bdx;
+    if (Math.abs(denom) < 1e-9) continue; // parallel — no crossing
+    const dx0 = B.x1 - W.x1, dy0 = B.y1 - W.y1;
+    const t = (dx0 * bdy - dy0 * bdx) / denom;
+    const s = (dx0 * wdy - dy0 * wdx) / denom;
+    if (t < epsT || t > 1 - epsT) continue;
+    if (s < epsT || s > 1 - epsT) continue;
 
-        const jx = W.x1 + wdx * t;
-        const jy = W.y1 + wdy * t;
-        const wlen = Math.sqrt(wlen2);
-        const wux = wdx / wlen, wuy = wdy / wlen;
-        const wnx = -wuy, wny = wux;
-        const wHalf = W.thickness / 2;
+    const jx = W.x1 + wdx * t;
+    const jy = W.y1 + wdy * t;
+    const wlen = Math.sqrt(wlen2);
+    const wux = wdx / wlen, wuy = wdy / wlen;
+    const wnx = -wuy, wny = wux;
+    const wHalf = W.thickness / 2;
 
-        // For each side of B, intersect W's two body edges with B's near
-        // face line. Those two intersections bound the break range that
-        // B's face should skip so W reads through.
-        for (const sideSign of [1, -1]) {
-          const aL = { x: jx + wnx * wHalf, y: jy + wny * wHalf };
-          const aR = { x: jx - wnx * wHalf, y: jy - wny * wHalf };
-          const nearFaceP = {
-            x: jx + bnx * sideSign * bHalf,
-            y: jy + bny * sideSign * bHalf,
-          };
-          const breakL = lineLineIntersect(aL, wux, wuy, nearFaceP, bux, buy);
-          const breakR = lineLineIntersect(aR, wux, wuy, nearFaceP, bux, buy);
-          if (!breakL || !breakR) continue;
-          out.push({ side: sideSign, p1: breakL, p2: breakR });
-        }
-      }
+    // For each side of B, intersect W's two body edges with B's near
+    // face line. Those two intersections bound the break range that
+    // B's face should skip so W reads through.
+    for (const sideSign of [1, -1]) {
+      const aL = { x: jx + wnx * wHalf, y: jy + wny * wHalf };
+      const aR = { x: jx - wnx * wHalf, y: jy - wny * wHalf };
+      const nearFaceP = {
+        x: jx + bnx * sideSign * bHalf,
+        y: jy + bny * sideSign * bHalf,
+      };
+      const breakL = lineLineIntersect(aL, wux, wuy, nearFaceP, bux, buy);
+      const breakR = lineLineIntersect(aR, wux, wuy, nearFaceP, bux, buy);
+      if (!breakL || !breakR) continue;
+      out.push({ side: sideSign, p1: breakL, p2: breakR });
     }
   }
   return out;
@@ -488,31 +493,24 @@ function findAdjacentThickWall(self, jx, jy) {
   const sux = sdx / slen, suy = sdy / slen;
 
   let colinearMatch = null;
-  for (const story of state.stories) {
-    if (!story.visible) continue;
-    for (const sub of story.sublayers) {
-      if (sub.name !== WALL_LAYER_NAME || !sub.visible) continue;
-      for (const sh of sub.shapes) {
-        if (sh === self) continue;
-        if (sh.type !== "line" || !sh.thickness) continue;
-        let end = null;
-        if (Math.abs(sh.x1 - jx) < tol && Math.abs(sh.y1 - jy) < tol) end = "p1";
-        else if (Math.abs(sh.x2 - jx) < tol && Math.abs(sh.y2 - jy) < tol) end = "p2";
-        if (!end) continue;
-        const ndx = sh.x2 - sh.x1, ndy = sh.y2 - sh.y1;
-        const nlen = Math.hypot(ndx, ndy);
-        if (nlen < 1e-9) continue;
-        const nux = ndx / nlen, nuy = ndy / nlen;
-        const cross = sux * nuy - suy * nux;
-        if (Math.abs(cross) < 1e-6) {
-          // Colinear with self — keep as a fallback in case nothing else is at
-          // this joint, but keep looking for a real corner partner.
-          if (!colinearMatch) colinearMatch = { wall: sh, end, colinear: true };
-          continue;
-        }
-        return { wall: sh, end };
-      }
+  for (const sh of thickWallList()) {
+    if (sh === self) continue;
+    let end = null;
+    if (Math.abs(sh.x1 - jx) < tol && Math.abs(sh.y1 - jy) < tol) end = "p1";
+    else if (Math.abs(sh.x2 - jx) < tol && Math.abs(sh.y2 - jy) < tol) end = "p2";
+    if (!end) continue;
+    const ndx = sh.x2 - sh.x1, ndy = sh.y2 - sh.y1;
+    const nlen = Math.hypot(ndx, ndy);
+    if (nlen < 1e-9) continue;
+    const nux = ndx / nlen, nuy = ndy / nlen;
+    const cross = sux * nuy - suy * nux;
+    if (Math.abs(cross) < 1e-6) {
+      // Colinear with self — keep as a fallback in case nothing else is at
+      // this joint, but keep looking for a real corner partner.
+      if (!colinearMatch) colinearMatch = { wall: sh, end, colinear: true };
+      continue;
     }
+    return { wall: sh, end };
   }
   return colinearMatch;
 }

@@ -117,11 +117,18 @@ function showSettingsModal() {
   const radios = modal.querySelectorAll('input[name="settings-units"]');
   for (const r of radios) r.checked = (r.value === state.units);
   modal.classList.remove("hidden");
+  // Trap Tab inside the dialog window, not the .settings-modal backdrop —
+  // the backdrop's only interactive child is the window anyway, but the
+  // trap walks all focusables and we don't want it cycling into the
+  // backdrop's own pointerdown surface.
+  trapFocusIn(modal.querySelector(".settings-window") || modal);
 }
 
 function hideSettingsModal() {
   const modal = document.getElementById("settings-modal");
-  if (modal) modal.classList.add("hidden");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  releaseFocusTrap();
 }
 
 function bindSettingsModal() {

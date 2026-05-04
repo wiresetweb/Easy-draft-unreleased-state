@@ -624,13 +624,25 @@ function bindLayersPanel() {
     if (palettePanel.classList.contains("hidden")) return;
     positionPaletteUnderLayers();
   };
-  layersMin.addEventListener("click", () => {
-    requestAnimationFrame(reposition);
-  });
+  // The MutationObserver below fires once per style write on the layers
+  // panel (see bindFloatingPanelChrome — drag-to-move writes style.left /
+  // top on every pointermove, ~60Hz). Coalesce all observations within a
+  // single animation frame so `reposition` reads layout state at most
+  // once per frame instead of once per pointermove event.
+  let repositionScheduled = false;
+  const scheduleReposition = () => {
+    if (repositionScheduled) return;
+    repositionScheduled = true;
+    requestAnimationFrame(() => {
+      repositionScheduled = false;
+      reposition();
+    });
+  };
+  layersMin.addEventListener("click", scheduleReposition);
   if (typeof ResizeObserver !== "undefined") {
-    new ResizeObserver(reposition).observe(layersPanel);
+    new ResizeObserver(scheduleReposition).observe(layersPanel);
   }
-  new MutationObserver(reposition).observe(layersPanel, {
+  new MutationObserver(scheduleReposition).observe(layersPanel, {
     attributes: true,
     attributeFilter: ["style"],
   });

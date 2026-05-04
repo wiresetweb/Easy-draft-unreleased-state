@@ -79,6 +79,7 @@ function openFurnitureBuilder() {
   builderModal.classList.remove("hidden");
   // The stage doesn't have a real size until it's visible — measure now.
   requestAnimationFrame(() => { fitBuilderCanvas(); renderBuilder(); });
+  trapFocusIn(builderModal);
 }
 
 function closeFurnitureBuilder() {
@@ -86,6 +87,7 @@ function closeFurnitureBuilder() {
   builderModal.classList.add("hidden");
   builder.pending = null;
   builder.drag = null;
+  releaseFocusTrap();
 }
 
 function setBuilderTool(tool) {

@@ -47,7 +47,15 @@ function drawSelectedShapeGlow() {
 }
 
 function drawAllShapes() {
-  forEachVisibleShape((sh, sub) => drawShape(sh, sub.color || DEFAULT_LAYER_COLOR_FALLBACK, sub));
+  // Build the thick-wall index once for the whole pass — every thin line
+  // and every wall miters / breaks against this list, and recomputing it
+  // per shape was the dominant cost of render() on busy drawings.
+  beginThickWallCache();
+  try {
+    forEachVisibleShape((sh, sub) => drawShape(sh, sub.color || DEFAULT_LAYER_COLOR_FALLBACK, sub));
+  } finally {
+    endThickWallCache();
+  }
 }
 
 // World-origin reference cross — same affordance the furniture builder

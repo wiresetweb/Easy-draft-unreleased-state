@@ -326,8 +326,17 @@ function preservingPageCenter(sheet, mutate) {
   sheet.pageOrigin = { x: center.x - after.w / 2, y: center.y - after.h / 2 };
 }
 
+// viewSize() reads the canvas bounding rect, which forces a layout flush.
+// renderPlanView() calls paperFitPpi → paperFitPpiBase dozens of times
+// (title block, every cell, every measurement) — all with the same view.
+// Stash once at the top of the render and reuse for every downstream call.
+let _planRenderViewCache = null;
+function planRenderViewSize() {
+  return _planRenderViewCache || viewSize();
+}
+
 function paperFitPpiBase(sheet) {
-  const view = viewSize();
+  const view = planRenderViewSize();
   const dim = paperDimensionsIn(sheet);
   const sx = (view.w - PAPER_FIT_PADDING_PX * 2) / dim.w;
   const sy = (view.h - PAPER_FIT_PADDING_PX * 2) / dim.h;
@@ -353,7 +362,10 @@ function planPan() {
 function renderPlanView() {
   ensureSheets();
   const sheet = activeSheet();
+  // Read the canvas size once and stash it for every downstream
+  // paperFitPpi / planRenderViewSize() call in this render pass.
   const view = viewSize();
+  _planRenderViewCache = view;
 
   ctx.save();
   if (!state.printContext) {
@@ -439,6 +451,7 @@ function renderPlanView() {
   }
 
   ctx.restore();
+  _planRenderViewCache = null;
 }
 
 // ==============================================================================
@@ -2104,14 +2117,18 @@ function renderSheetList() {
     // Eye toggle for the page outline on the draft canvas. Only drawing
     // sheets have a page rect to show; schedule / index sheets don't get
     // the button at all (would be a dead control).
+    const sheetLabel = ((sheet.number || "").trim() || "sheet") + " " + (sheet.name || "");
     if ((sheet.sheetType || "drawing") === "drawing") {
       const visible = !!sheet.pageOutlineVisible;
       const visBtn = document.createElement("button");
       visBtn.className = "icon-btn vis-btn" + (visible ? "" : " muted");
       visBtn.dataset.sheetAction = "toggle-visibility";
-      visBtn.title = visible
+      const visLabel = visible
         ? "Hide page outline on the draft canvas"
         : "Show page outline on the draft canvas";
+      visBtn.title = visLabel;
+      visBtn.setAttribute("aria-label", `${visLabel} for ${sheetLabel}`);
+      visBtn.setAttribute("aria-pressed", String(visible));
       visBtn.innerHTML = visible ? eyeSvg() : eyeOffSvg();
       row.appendChild(visBtn);
     }
@@ -2120,6 +2137,7 @@ function renderSheetList() {
     renameBtn.className = "icon-btn";
     renameBtn.dataset.sheetAction = "rename";
     renameBtn.title = "Rename";
+    renameBtn.setAttribute("aria-label", `Rename ${sheetLabel}`);
     renameBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
     row.appendChild(renameBtn);
 
@@ -2127,6 +2145,7 @@ function renderSheetList() {
     delBtn.className = "icon-btn delete-btn";
     delBtn.dataset.sheetAction = "delete";
     delBtn.title = "Delete sheet";
+    delBtn.setAttribute("aria-label", `Delete ${sheetLabel}`);
     delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
     row.appendChild(delBtn);
 

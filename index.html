@@ -203,14 +203,14 @@
     </aside>
 
     <main class="canvas-wrap">
-      <canvas id="board"></canvas>
+      <canvas id="board" role="application" aria-label="Drafting canvas — use the toolbar on the left to pick a tool, then draw with the mouse" tabindex="0"></canvas>
       <div class="hint" id="hint"><kbd>V</kbd> Select · <kbd>L</kbd> Line · <kbd>B</kbd> Box · <kbd>S</kbd> Stairs · <kbd>T</kbd> Text · <kbd>M</kbd> Measure · <kbd>H</kbd>/<kbd>Space</kbd> Pan · <kbd>Shift</kbd> lock · <kbd>Del</kbd> remove · select a line for stroke + curve handle</div>
 
       <div class="palette-panel" id="layers-panel">
         <div class="palette-header" id="layers-header">
           <span class="palette-title">Layers</span>
           <button class="btn-mini" id="add-story-btn" title="Add a new story">+ Story</button>
-          <button class="palette-min" id="layers-min" title="Minimize">
+          <button class="palette-min" id="layers-min" title="Minimize" aria-label="Minimize layers panel">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -223,7 +223,7 @@
       <div class="palette-panel hidden" id="palette-panel">
         <div class="palette-header" id="palette-header">
           <span class="palette-title">Doors &amp; Windows</span>
-          <button class="palette-min" id="palette-min" title="Minimize">
+          <button class="palette-min" id="palette-min" title="Minimize" aria-label="Minimize palette">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -499,6 +499,7 @@
        file://). main.js calls init() once everything is loaded. -->
   <script src="js/config.js"></script>
   <script src="js/state.js"></script>
+  <script src="js/a11y.js"></script>
   <script src="js/units.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/custom-furniture.js"></script>
