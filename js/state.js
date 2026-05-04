@@ -171,20 +171,36 @@ const PALETTE_ITEMS = {
   // facing the front of the piece; depth is front-to-back. We pick conservative
   // mid-line sizes — a Pottery Barn / West Elm "default" — so the symbols read
   // proportionally even before the user re-sizes anything.
-  furniture: [
+  //
+  // Organized by room. Pieces that read naturally in more than one room
+  // (TVs, floor lamps, bookshelves) are duplicated into each section so the
+  // user finds them wherever they expect to look.
+  livingRoom: [
     { name: 'Armchair 32"',         kind: "armchair",       width: 2 + 8 / 12, depth: 2 + 8 / 12 },
-    { name: 'Dining Chair 18"',     kind: "dining-chair",   width: 1.5,        depth: 1 + 7 / 12 },
-    { name: 'Stool 15"',            kind: "stool",          width: 1.25,       depth: 1.25 },
     { name: 'Loveseat 5\'-3"',      kind: "loveseat",       width: 5.25,       depth: 3 + 2 / 12 },
     { name: 'Sofa 7\'-0"',          kind: "sofa",           width: 7,          depth: 3 + 2 / 12 },
     { name: 'Sectional 9\' × 6\'',  kind: "sectional",      width: 9,          depth: 6 },
     { name: 'Media Console 60"',    kind: "media-console",  width: 5,          depth: 1.5 },
     { name: 'TV 55" (stand)',       kind: "tv-stand",       width: 4,          depth: 0.5 },
     { name: 'TV 55" (wall)',        kind: "tv-wall",        width: 4,          depth: 0.25 },
-    { name: 'Wardrobe 4\'-0"',      kind: "wardrobe",       width: 4,          depth: 2 },
-    { name: 'Dresser 60"',          kind: "dresser",        width: 5,          depth: 1.5 },
     { name: 'Floor Lamp',           kind: "floor-lamp",     width: 1.25,       depth: 1.25 },
   ],
+  bedroom: [
+    { name: 'Wardrobe 4\'-0"',      kind: "wardrobe",       width: 4,          depth: 2 },
+    { name: 'Dresser 60"',          kind: "dresser",        width: 5,          depth: 1.5 },
+    { name: 'TV 55" (stand)',       kind: "tv-stand",       width: 4,          depth: 0.5 },
+    { name: 'TV 55" (wall)',        kind: "tv-wall",        width: 4,          depth: 0.25 },
+    { name: 'Floor Lamp',           kind: "floor-lamp",     width: 1.25,       depth: 1.25 },
+  ],
+  diningRoom: [
+    { name: 'Dining Chair 18"',     kind: "dining-chair",   width: 1.5,        depth: 1 + 7 / 12 },
+    { name: 'Stool 15"',            kind: "stool",          width: 1.25,       depth: 1.25 },
+  ],
+  // Office and laundry start empty — populated by syncCustomFurnitureToPalette
+  // from the Custom Furniture Library. Kept as named sections so the palette
+  // headers always render even before the library loads.
+  office: [],
+  laundry: [],
   // Standard US residential bathroom fixtures. Dimensions follow common
   // manufacturer spec sheets (Kohler / Toto / American Standard) and the
   // IRC / ANSI Z124 ranges used on builder plan sets.
@@ -206,12 +222,10 @@ const PALETTE_ITEMS = {
     { name: 'Bidet',                  kind: "bidet",        width: 1 + 3 / 12,  depth: 2 + 1 / 12 },
     { name: 'Urinal',                 kind: "urinal",       width: 1 + 2 / 12,  depth: 1 + 2 / 12 },
     { name: 'Pedestal Sink 22"',      kind: "lav-pedestal", width: 1 + 10 / 12, depth: 1 + 7 / 12 },
-    { name: 'Vanity 24"',             kind: "vanity",       width: 2,           depth: 1 + 9 / 12 },
-    { name: 'Vanity 30"',             kind: "vanity",       width: 2.5,         depth: 1 + 9 / 12 },
-    { name: 'Vanity 36"',             kind: "vanity",       width: 3,           depth: 1 + 9 / 12 },
+    // Custom Vanity 24/30/36/60/72 entries from the Custom Furniture Library
+    // replace the procedural vanity built-ins; only the 48" stays here since
+    // it has no custom counterpart.
     { name: 'Vanity 48"',             kind: "vanity",       width: 4,           depth: 1 + 9 / 12 },
-    { name: 'Double Vanity 60"',      kind: "vanity-double", width: 5,          depth: 1 + 9 / 12 },
-    { name: 'Double Vanity 72"',      kind: "vanity-double", width: 6,          depth: 1 + 9 / 12 },
     { name: 'Bathtub 60" × 30"',      kind: "tub-alcove",   width: 5,           depth: 2.5 },
     { name: 'Bathtub 60" × 32"',      kind: "tub-alcove",   width: 5,           depth: 2 + 8 / 12 },
     { name: 'Tub/Shower 60" × 32"',   kind: "tub-shower",   width: 5,           depth: 2 + 8 / 12 },
@@ -266,7 +280,10 @@ const state = {
   curveDrag: null, // { shapeId, originalShape, historyPushed }
 
   placing: null, // { def, sectionKey }
-  paletteExpanded: { doors: true, windows: true, kitchen: true, bathroom: true },
+  paletteExpanded: {
+    doors: true, windows: true, kitchen: true, bathroom: true,
+    livingRoom: true, bedroom: true, diningRoom: true, office: true, laundry: true,
+  },
 
   colorPopup: null, // { subId } when open
 
