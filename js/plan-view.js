@@ -120,11 +120,9 @@ function defaultPageOriginForNewSheet(paperSizeKey, orientation) {
   const phFt = dim.h / ipf;
   let cx = 0, cy = 0;
   try {
-    if (typeof viewSize === "function" && typeof screenToWorld === "function") {
-      const v = viewSize();
-      const c = screenToWorld(v.w / 2, v.h / 2);
-      if (isFinite(c.x) && isFinite(c.y)) { cx = c.x; cy = c.y; }
-    }
+    const v = viewSize();
+    const c = screenToWorld(v.w / 2, v.h / 2);
+    if (isFinite(c.x) && isFinite(c.y)) { cx = c.x; cy = c.y; }
   } catch (_) { /* canvas not ready yet */ }
   return { x: cx - pwFt / 2, y: cy - phFt / 2 };
 }
@@ -452,23 +450,21 @@ function renderPlanView() {
 function collectScheduleData() {
   const doorGroups = new Map();
   const windowGroups = new Map();
-  if (typeof forEachShape === "function") {
-    forEachShape((sh) => {
-      if (sh.type === "door") {
-        // Group identical doors by catalog name (or subtype + width as a
-        // last resort for hand-edited shapes).
-        const key = sh.kind || `${sh.subtype || "Swing"} ${formatFeet(sh.width)}`;
-        const g = doorGroups.get(key) || { kind: key, width: sh.width || 0, count: 0 };
-        g.count += 1;
-        doorGroups.set(key, g);
-      } else if (sh.type === "window") {
-        const key = sh.kind || `Window ${formatFeet(sh.width)}`;
-        const g = windowGroups.get(key) || { kind: key, width: sh.width || 0, count: 0 };
-        g.count += 1;
-        windowGroups.set(key, g);
-      }
-    });
-  }
+  forEachShape((sh) => {
+    if (sh.type === "door") {
+      // Group identical doors by catalog name (or subtype + width as a
+      // last resort for hand-edited shapes).
+      const key = sh.kind || `${sh.subtype || "Swing"} ${formatFeet(sh.width)}`;
+      const g = doorGroups.get(key) || { kind: key, width: sh.width || 0, count: 0 };
+      g.count += 1;
+      doorGroups.set(key, g);
+    } else if (sh.type === "window") {
+      const key = sh.kind || `Window ${formatFeet(sh.width)}`;
+      const g = windowGroups.get(key) || { kind: key, width: sh.width || 0, count: 0 };
+      g.count += 1;
+      windowGroups.set(key, g);
+    }
+  });
 
   // Display the catalog kind in the user's current units. The grouping key
   // is still the original (English) kind, so two doors placed under different
@@ -1043,7 +1039,7 @@ function drawTitleBlockSection(kind, sheet, x, y, w, h, ppi) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    const logo = (typeof ensureWatermarkLogo === "function") ? ensureWatermarkLogo() : null;
+    const logo = ensureWatermarkLogo();
     const logoCenterY = y + h * 0.32;
     if (logo && logo.complete && logo.naturalWidth > 0) {
       // Constrain to ~75% of cell width and ~45% of cell height. Whichever
@@ -1259,7 +1255,7 @@ function setViewMode(mode) {
     state.selectionData = null;
     state.curveDrag = null;
     state.stairsDirection = null;
-    if (typeof hideLayerHintModal === "function") hideLayerHintModal();
+    hideLayerHintModal();
     ensureSheets();
   }
 
@@ -1471,10 +1467,10 @@ function captureAllSheetsForPrint(dpi) {
     ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
     fitCanvas();
     // Refresh the Plan-mode UI in case the active sheet was cycled past.
-    if (typeof renderSheetList === "function") renderSheetList();
-    if (typeof renderSheetProperties === "function") renderSheetProperties();
-    if (typeof renderNotesEditor === "function") renderNotesEditor();
-    if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+    renderSheetList();
+    renderSheetProperties();
+    renderNotesEditor();
+    renderSheetLayerTree();
     render();
   }
   return pages;
@@ -1705,7 +1701,7 @@ function planWheel(e) {
     }
   }
 
-  if (typeof renderSheetProperties === "function") renderSheetProperties();
+  renderSheetProperties();
   render();
 }
 

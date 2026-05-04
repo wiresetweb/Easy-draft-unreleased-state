@@ -533,7 +533,7 @@ function saveCustomFurniture() {
 
   closeFurnitureBuilder();
   // Re-render the main canvas so a freshly-added piece shows up in the palette.
-  if (typeof render === "function") render();
+  render();
 }
 
 function primitivesBBox(prims) {
@@ -603,7 +603,7 @@ function syncCustomFurnitureToPalette() {
       primitives: piece.primitives,
     });
   }
-  if (typeof renderPalette === "function") renderPalette();
+  renderPalette();
 }
 
 // ---------- key handling (modal-local) ----------

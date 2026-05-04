@@ -349,7 +349,7 @@ function updateSelectCursor(sp) {
   }
   // Page edge takes the same cursor as a movable shape so the user
   // recognizes it as draggable.
-  if (typeof findPageEdgeAtScreen === "function" && findPageEdgeAtScreen(sp.x, sp.y)) {
+  if (findPageEdgeAtScreen(sp.x, sp.y)) {
     canvas.style.cursor = "move";
     return;
   }
@@ -403,7 +403,7 @@ function startPageMove(sheet, wp) {
     startWorld: { x: wp.x, y: wp.y },
     origOrigin: { x: sheet.pageOrigin.x, y: sheet.pageOrigin.y },
   };
-  if (typeof renderSheetList === "function") renderSheetList();
+  renderSheetList();
   render();
 }
 
@@ -656,13 +656,11 @@ function handleSelectPointerDown(sp, e) {
   // Page edge takes priority over shape selection — clicking the dashed
   // paper outline drags the whole page around the canvas. Shapes inside
   // the viewport area are still selectable normally.
-  if (typeof findPageEdgeAtScreen === "function") {
-    const pageHit = findPageEdgeAtScreen(sp.x, sp.y);
-    if (pageHit) {
-      startPageMove(pageHit, wp);
-      resetCrossLayerMisses();
-      return;
-    }
+  const pageHit = findPageEdgeAtScreen(sp.x, sp.y);
+  if (pageHit) {
+    startPageMove(pageHit, wp);
+    resetCrossLayerMisses();
+    return;
   }
 
   // Curve handle on a single selected line/arc gets first dibs

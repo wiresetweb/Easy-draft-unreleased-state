@@ -158,7 +158,7 @@
       const res = await fetch("demos/" + safe + ".dstudio.json", { cache: "no-cache" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
-      if (typeof loadDocument === "function") loadDocument(data);
+      loadDocument(data);
       // Force the active layer to a non-palette layer (Walls preferred) so
       // the demo's Line / Wall tool actually works. setTool("line") in
       // events.js silently falls back to "select" when the active layer has
@@ -179,9 +179,9 @@
   }
 
   function refitNow() {
-    if (typeof fitCanvas === "function") fitCanvas();
+    fitCanvas();
     fitDrawingToView();
-    if (typeof render === "function") render();
+    render();
   }
 
   // Whenever the .canvas-wrap changes size — which fires on the first real
@@ -197,8 +197,8 @@
         // Still resync the canvas pixel buffer so the existing pan/zoom
         // renders crisply at the new size. fitCanvas() doesn't change
         // state.zoom or state.pan — only the backing buffer.
-        if (typeof fitCanvas === "function") fitCanvas();
-        if (typeof render === "function") render();
+        fitCanvas();
+        render();
         return;
       }
       refitNow();
@@ -260,11 +260,11 @@
     }
     if (pick) {
       state.activeSublayerId = pick.id;
-      if (typeof renderLayerTree === "function") renderLayerTree();
-      if (typeof updatePaletteVisibility === "function") updatePaletteVisibility();
+      renderLayerTree();
+      updatePaletteVisibility();
       // Recompute disabled state on the (hidden) original tool buttons so
       // the LAYER_DRAW_TOOLS guard in setTool reads the right answer.
-      if (typeof updateToolButtonsForLayer === "function") updateToolButtonsForLayer();
+      updateToolButtonsForLayer();
     }
   }
 
@@ -279,12 +279,9 @@
       for (const sub of story.sublayers || []) {
         if (!sub.visible) continue;
         for (const sh of sub.shapes || []) {
-          // Use shapeBBox from selection.js when available — it knows every
-          // shape type's true extent. Otherwise fall back to obvious props.
+          // shapeBBox knows every shape type's true extent.
           let bb = null;
-          if (typeof shapeBBox === "function") {
-            try { bb = shapeBBox(sh); } catch (_) { bb = null; }
-          }
+          try { bb = shapeBBox(sh); } catch (_) { bb = null; }
           // bbox shape: { x1, y1, x2, y2 } — see shapes.js SHAPES[type].bbox.
           if (bb && isFinite(bb.x1) && isFinite(bb.y1) && isFinite(bb.x2) && isFinite(bb.y2)) {
             if (bb.x1 < minX) minX = bb.x1;
@@ -296,17 +293,17 @@
       }
     }
     if (!isFinite(minX) || !isFinite(maxX)) {
-      if (typeof centerView === "function") centerView();
+      centerView();
       return;
     }
     // Use the same view size the renderer uses (canvas-wrap rect in CSS px) —
     // matches centerView()'s assumptions and avoids dpr / canvas-buffer drift.
-    const view = (typeof viewSize === "function") ? viewSize() : { w: canvas.clientWidth, h: canvas.clientHeight };
+    const view = viewSize();
     const cw = view.w, ch = view.h;
     if (cw <= 0 || ch <= 0) return;
     const dw = maxX - minX, dh = maxY - minY;
     if (dw <= 0 || dh <= 0) {
-      if (typeof centerView === "function") centerView();
+      centerView();
       return;
     }
     // Pad ~12% so the drawing isn't kissing the iframe edges.

@@ -706,7 +706,7 @@ function placeItem(def, sectionKey, worldPos) {
     if (wallBack) {
       x = wallBack.x; y = wallBack.y; angle = wallBack.angle;
     } else {
-      const pos = snapWorldHalf(worldPos);
+      const pos = snapWorld(worldPos);
       x = pos.x - def.width / 2;
       y = pos.y - def.depth / 2;
       angle = 0;
@@ -739,7 +739,7 @@ function placeItem(def, sectionKey, worldPos) {
   // on the centerline as before — passing 0 keeps the legacy behavior.
   const depthForAlign = sectionKey === "windows" ? DEFAULT_WINDOW_DEPTH_FT : 0;
   const aligned = detectAlignedPosition(worldPos, def.width, depthForAlign);
-  const pos = aligned || snapWorldHalf(worldPos);
+  const pos = aligned || snapWorld(worldPos);
   const angle = aligned ? aligned.angle : 0;
   let shape;
   if (sectionKey === "windows") {

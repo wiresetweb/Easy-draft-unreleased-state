@@ -42,13 +42,13 @@ function loadSavedUnits() {
 function applyUnitsToUI() {
   applyUnitsToGridInput();
   applyUnitsToDimHint();
-  if (typeof populateScaleSelect === "function") populateScaleSelect();
-  if (typeof renderPalette === "function") renderPalette();
-  if (typeof renderSheetProperties === "function") renderSheetProperties();
-  if (typeof updateLineModal === "function") updateLineModal();
-  if (typeof updateDimModal === "function") updateDimModal();
-  if (typeof updateMeasureModal === "function") updateMeasureModal();
-  if (typeof render === "function") render();
+  populateScaleSelect();
+  renderPalette();
+  renderSheetProperties();
+  updateLineModal();
+  updateDimModal();
+  updateMeasureModal();
+  render();
 }
 
 function applyUnitsToDimHint() {

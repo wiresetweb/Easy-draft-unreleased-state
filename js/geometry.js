@@ -25,12 +25,6 @@ function snapWorld(p) {
   const g = state.gridSize / 2;
   return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
 }
-// Alias kept around for self-documenting call sites that explicitly want
-// the "half-grid" semantics (doors, windows, furniture, cabinet builder).
-// Functionally identical to snapWorld now that the universal snap is half.
-function snapWorldHalf(p) {
-  return snapWorld(p);
-}
 function snapDelta(dx, dy) {
   if (!state.snap) return { dx, dy };
   // Half-grid steps so a piece that was dropped on a half-grid position (the

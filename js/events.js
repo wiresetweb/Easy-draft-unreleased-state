@@ -49,8 +49,8 @@ function setTool(tool) {
     // The "wrong layer?" hint is select-tool specific. Reset its counter
     // and dismiss the modal so a stale prompt doesn't follow the user into
     // a drawing tool.
-    if (typeof resetCrossLayerMisses === "function") resetCrossLayerMisses();
-    if (typeof hideLayerHintModal === "function") hideLayerHintModal();
+    resetCrossLayerMisses();
+    hideLayerHintModal();
   }
   for (const btn of toolListEl.querySelectorAll(".tool")) {
     btn.classList.toggle("active", btn.dataset.tool === tool);
@@ -135,7 +135,7 @@ function bindEvents() {
         // skip past to get to their last shape edit.
         story.visible = !story.visible;
         renderLayerTree();
-        if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+        renderSheetLayerTree();
         render();
       } else if (action === "add-sub") {
         const name = prompt("Name for new sub-layer:", "New Layer");
@@ -143,7 +143,7 @@ function bindEvents() {
           pushHistory();
           addSublayer(story.id, name.trim());
           renderLayerTree();
-          if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+          renderSheetLayerTree();
           render();
         }
       } else if (action === "vis-sub" && subRow) {
@@ -152,7 +152,7 @@ function bindEvents() {
           // See vis-story above: visibility is a view setting, not undoable.
           sub.visible = !sub.visible;
           renderLayerTree();
-          if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+          renderSheetLayerTree();
           render();
         }
       } else if (action === "color-sub" && subRow) {
@@ -168,7 +168,7 @@ function bindEvents() {
         pushHistory();
         if (deleteStory(story.id)) {
           renderLayerTree();
-          if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+          renderSheetLayerTree();
           render();
         }
       } else if (action === "delete-sub" && subRow) {
@@ -182,7 +182,7 @@ function bindEvents() {
         pushHistory();
         if (deleteSublayer(story.id, sub.id)) {
           renderLayerTree();
-          if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+          renderSheetLayerTree();
           render();
         }
       }
@@ -217,7 +217,7 @@ function bindEvents() {
     pushHistory();
     addStory();
     renderLayerTree();
-    if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+    renderSheetLayerTree();
     render();
   });
 

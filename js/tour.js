@@ -151,7 +151,7 @@ function tourStepList() {
         // Defensive: if step 6 advanced because state.activeSublayerId was
         // already on Windows & Doors (e.g. the user replayed the tour), the
         // palette panel may not have been re-rendered. Force-sync now.
-        if (typeof updatePaletteVisibility === "function") updatePaletteVisibility();
+        updatePaletteVisibility();
       },
       advance: () => tourCountShapesByType("door") > (tourSnapshot.doorCount || 0),
     },

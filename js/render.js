@@ -46,8 +46,6 @@ function drawSelectedShapeGlow() {
   });
 }
 
-function drawCurveHover() { /* curve tool removed; in-selection handle handles this */ }
-
 function drawAllShapes() {
   forEachVisibleShape((sh, sub) => drawShape(sh, sub.color || DEFAULT_LAYER_COLOR_FALLBACK, sub));
 }
@@ -245,8 +243,6 @@ function drawCurveHandle() {
   ctx.restore();
 }
 
-function drawCurvePreview() { /* unused — handle is drawn live via drawCurveHandle */ }
-
 function drawPlacingPreview() {
   if (!state.placing) return;
   const view = viewSize();
@@ -275,7 +271,7 @@ function drawPlacingPreview() {
       };
       pos = { x: wallBack.x, y: wallBack.y };
     } else {
-      pos = snapWorldHalf(state.cursorWorld);
+      pos = snapWorld(state.cursorWorld);
       shape = {
         type: "appliance",
         x: pos.x - def.width / 2,
@@ -293,7 +289,7 @@ function drawPlacingPreview() {
   } else {
     const depthForAlign = sectionKey === "windows" ? DEFAULT_WINDOW_DEPTH_FT : 0;
     const aligned = detectAlignedPosition(state.cursorWorld, def.width, depthForAlign);
-    pos = aligned || snapWorldHalf(state.cursorWorld);
+    pos = aligned || snapWorld(state.cursorWorld);
     const angle = aligned ? aligned.angle : 0;
 
     if (sectionKey === "windows") {
