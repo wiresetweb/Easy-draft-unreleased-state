@@ -51,7 +51,7 @@ function restore(snap) {
   if (stairsModal && !stairsModal.classList.contains("hidden")) hideStairsModal();
   if (cabinetModal) detachCabinetModalFromPalette();
   renderLayerTree();
-  if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+  renderSheetLayerTree();
 }
 
 function pruneSelection() {

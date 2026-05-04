@@ -151,7 +151,7 @@ function tourStepList() {
         // Defensive: if step 6 advanced because state.activeSublayerId was
         // already on Windows & Doors (e.g. the user replayed the tour), the
         // palette panel may not have been re-rendered. Force-sync now.
-        if (typeof updatePaletteVisibility === "function") updatePaletteVisibility();
+        updatePaletteVisibility();
       },
       advance: () => tourCountShapesByType("door") > (tourSnapshot.doorCount || 0),
     },
@@ -290,7 +290,8 @@ function onTourKeydown(e) {
     const modalOpen = document.querySelector(
       ".dim-modal:not(.hidden), .line-modal:not(.hidden), .text-modal:not(.hidden)," +
       " .measure-modal:not(.hidden), .stairs-modal:not(.hidden), .cabinet-modal:not(.hidden)," +
-      " .island-modal:not(.hidden), .layer-hint-modal:not(.hidden)"
+      " .island-modal:not(.hidden), .layer-hint-modal:not(.hidden)," +
+      " .settings-modal:not(.hidden)"
     );
     if (modalOpen) return;
     endTour(true);

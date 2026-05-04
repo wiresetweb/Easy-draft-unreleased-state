@@ -51,7 +51,7 @@ function snapAlongWall(px, py, wall) {
   const dx = wall.x2 - wall.x1, dy = wall.y2 - wall.y1;
   const len2 = dx * dx + dy * dy;
   if (len2 < 1e-12) return { x: px, y: py };
-  const snapped = snapWorldHalf({ x: px, y: py });
+  const snapped = snapWorld({ x: px, y: py });
   let t = ((snapped.x - wall.x1) * dx + (snapped.y - wall.y1) * dy) / len2;
   if (t < 0) t = 0; else if (t > 1) t = 1;
   return { x: wall.x1 + dx * t, y: wall.y1 + dy * t };

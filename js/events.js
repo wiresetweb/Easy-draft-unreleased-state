@@ -49,8 +49,8 @@ function setTool(tool) {
     // The "wrong layer?" hint is select-tool specific. Reset its counter
     // and dismiss the modal so a stale prompt doesn't follow the user into
     // a drawing tool.
-    if (typeof resetCrossLayerMisses === "function") resetCrossLayerMisses();
-    if (typeof hideLayerHintModal === "function") hideLayerHintModal();
+    resetCrossLayerMisses();
+    hideLayerHintModal();
   }
   for (const btn of toolListEl.querySelectorAll(".tool")) {
     btn.classList.toggle("active", btn.dataset.tool === tool);
@@ -129,10 +129,13 @@ function bindEvents() {
         story.expanded = !story.expanded;
         renderLayerTree();
       } else if (action === "vis-story") {
-        pushHistory();
+        // Visibility is a view setting, not a content edit — it round-trips
+        // through save/load but doesn't belong on the undo stack. Toggling
+        // a layer back on shouldn't require an undo step the user has to
+        // skip past to get to their last shape edit.
         story.visible = !story.visible;
         renderLayerTree();
-        if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+        renderSheetLayerTree();
         render();
       } else if (action === "add-sub") {
         const name = prompt("Name for new sub-layer:", "New Layer");
@@ -140,16 +143,16 @@ function bindEvents() {
           pushHistory();
           addSublayer(story.id, name.trim());
           renderLayerTree();
-          if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+          renderSheetLayerTree();
           render();
         }
       } else if (action === "vis-sub" && subRow) {
         const sub = story.sublayers.find((l) => l.id === subRow.dataset.subId);
         if (sub) {
-          pushHistory();
+          // See vis-story above: visibility is a view setting, not undoable.
           sub.visible = !sub.visible;
           renderLayerTree();
-          if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+          renderSheetLayerTree();
           render();
         }
       } else if (action === "color-sub" && subRow) {
@@ -165,7 +168,7 @@ function bindEvents() {
         pushHistory();
         if (deleteStory(story.id)) {
           renderLayerTree();
-          if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+          renderSheetLayerTree();
           render();
         }
       } else if (action === "delete-sub" && subRow) {
@@ -179,7 +182,7 @@ function bindEvents() {
         pushHistory();
         if (deleteSublayer(story.id, sub.id)) {
           renderLayerTree();
-          if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+          renderSheetLayerTree();
           render();
         }
       }
@@ -214,7 +217,7 @@ function bindEvents() {
     pushHistory();
     addStory();
     renderLayerTree();
-    if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+    renderSheetLayerTree();
     render();
   });
 
@@ -363,8 +366,12 @@ function bindEvents() {
       if (state.tool === "select" && state.selection.size > 0) {
         deleteSelected();
         render();
-        e.preventDefault();
       }
+      // Always swallow Backspace when the canvas owns focus — older Edge
+      // and some niche browsers still navigate the page back on it,
+      // which would discard any unsaved drawing work in one keystroke.
+      // Delete is harmless to swallow as well.
+      e.preventDefault();
       return;
     }
     if (e.key === "ArrowLeft" || e.key === "ArrowRight" ||
@@ -389,7 +396,10 @@ function bindEvents() {
       if (state.pending) { state.pending = null; render(); }
       else if (state.placing) { state.placing = null; wrap.classList.remove("placing"); render(); }
       else if (state.stairsDirection || !stairsModal.classList.contains("hidden")) { cancelStairs(); }
-      else if (state.cabinetBuilder) { finishCabinetBuilder(); }
+      // Cabinet builder: Esc discards. Matches CAD convention (AutoCAD,
+      // SketchUp, Revit) where Esc always cancels the current command —
+      // committing is what the explicit Finish button is for.
+      else if (state.cabinetBuilder) { cancelCabinetBuilder(); }
       else if (state.tool === "select" && state.selection.size > 0) {
         state.selection.clear();
         render();

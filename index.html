@@ -4,16 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Drafting Studio</title>
-  <link rel="icon" type="image/png" href="images/logo_transparent_background small.png" />
+  <link rel="icon" type="image/png" href="images/logo_transparent_background_small.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <img class="brand-mark" src="images/logo_transparent_background small.png" alt="Drafting Studio logo" />
+        <img class="brand-mark" src="images/logo_transparent_background_small.png" alt="Drafting Studio logo" />
         <div class="brand-text">
-          <div class="brand-title">Drafting Studio</div>
+          <div class="brand-title">
+            <span>Drafting Studio</span>
+            <span class="plan-badge plan-badge-free" id="plan-badge" title="Free version &mdash; exports are watermarked">Free</span>
+          </div>
           <div class="brand-sub" id="brand-sub">Residential drawings</div>
         </div>
       </div>
@@ -200,14 +203,14 @@
     </aside>
 
     <main class="canvas-wrap">
-      <canvas id="board"></canvas>
-      <div class="hint" id="hint"><kbd>V</kbd> Select · <kbd>L</kbd> Line · <kbd>T</kbd> Text · <kbd>M</kbd> Measure · <kbd>H</kbd>/<kbd>Space</kbd> Pan · <kbd>Shift</kbd> lock · <kbd>Del</kbd> remove · select a line for stroke + curve handle</div>
+      <canvas id="board" role="application" aria-label="Drafting canvas — use the toolbar on the left to pick a tool, then draw with the mouse" tabindex="0"></canvas>
+      <div class="hint" id="hint"><kbd>V</kbd> Select · <kbd>L</kbd> Line · <kbd>B</kbd> Box · <kbd>S</kbd> Stairs · <kbd>T</kbd> Text · <kbd>M</kbd> Measure · <kbd>H</kbd>/<kbd>Space</kbd> Pan · <kbd>Shift</kbd> lock · <kbd>Del</kbd> remove · select a line for stroke + curve handle</div>
 
       <div class="palette-panel" id="layers-panel">
         <div class="palette-header" id="layers-header">
           <span class="palette-title">Layers</span>
           <button class="btn-mini" id="add-story-btn" title="Add a new story">+ Story</button>
-          <button class="palette-min" id="layers-min" title="Minimize">
+          <button class="palette-min" id="layers-min" title="Minimize" aria-label="Minimize layers panel">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -220,7 +223,7 @@
       <div class="palette-panel hidden" id="palette-panel">
         <div class="palette-header" id="palette-header">
           <span class="palette-title">Doors &amp; Windows</span>
-          <button class="palette-min" id="palette-min" title="Minimize">
+          <button class="palette-min" id="palette-min" title="Minimize" aria-label="Minimize palette">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -244,7 +247,7 @@
             </button>
           </div>
         </div>
-        <div class="dim-hint">Type a size like <code>3'-0"</code> · <kbd>Enter</kbd> to apply</div>
+        <div class="dim-hint" id="dim-hint">Type a size like <code>3'-0"</code> &middot; <kbd>Enter</kbd> to apply</div>
       </div>
 
       <div class="line-modal hidden" id="line-modal">
@@ -433,7 +436,7 @@
             <span class="flip-icon">&#x21C6;</span> Flip Side
           </button>
         </div>
-        <div class="cabinet-modal-hint" id="cabinet-modal-hint">Click on the wall to place each cabinet point. The body draws once you have two points &mdash; if it's on the wrong side of your path, hit <kbd>F</kbd> or the Flip button to swap. Right-click undoes the last point. Esc finishes.</div>
+        <div class="cabinet-modal-hint" id="cabinet-modal-hint">Click on the wall to place each cabinet point. The body draws once you have two points &mdash; if it's on the wrong side of your path, hit <kbd>F</kbd> or the Flip button to swap. Right-click undoes the last point. Click <strong>Finish</strong> to commit, <kbd>Esc</kbd> to cancel.</div>
         <div class="cabinet-modal-actions">
           <button class="btn-mini" id="cabinet-cancel">Cancel</button>
           <button class="btn-mini cabinet-finish-btn" id="cabinet-finish">Finish</button>
@@ -496,6 +499,7 @@
        file://). main.js calls init() once everything is loaded. -->
   <script src="js/config.js"></script>
   <script src="js/state.js"></script>
+  <script src="js/a11y.js"></script>
   <script src="js/units.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/custom-furniture.js"></script>

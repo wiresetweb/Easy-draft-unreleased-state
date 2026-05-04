@@ -46,10 +46,16 @@ function drawSelectedShapeGlow() {
   });
 }
 
-function drawCurveHover() { /* curve tool removed; in-selection handle handles this */ }
-
 function drawAllShapes() {
-  forEachVisibleShape((sh, sub) => drawShape(sh, sub.color || DEFAULT_LAYER_COLOR_FALLBACK, sub));
+  // Build the thick-wall index once for the whole pass — every thin line
+  // and every wall miters / breaks against this list, and recomputing it
+  // per shape was the dominant cost of render() on busy drawings.
+  beginThickWallCache();
+  try {
+    forEachVisibleShape((sh, sub) => drawShape(sh, sub.color || DEFAULT_LAYER_COLOR_FALLBACK, sub));
+  } finally {
+    endThickWallCache();
+  }
 }
 
 // World-origin reference cross — same affordance the furniture builder
@@ -245,8 +251,6 @@ function drawCurveHandle() {
   ctx.restore();
 }
 
-function drawCurvePreview() { /* unused — handle is drawn live via drawCurveHandle */ }
-
 function drawPlacingPreview() {
   if (!state.placing) return;
   const view = viewSize();
@@ -260,10 +264,7 @@ function drawPlacingPreview() {
   let shape;
   let pos;
   if (sectionKey === "kitchen" || sectionKey === "furniture" || sectionKey === "bathroom") {
-    const skipWallSnap =
-      (sectionKey === "kitchen" && def.kind === "island") ||
-      def.kind === "custom";
-    const wallBack = skipWallSnap
+    const wallBack = paletteSkipsWallSnap(sectionKey, def)
       ? null
       : detectWallBackedPosition(state.cursorWorld, def.width, def.depth, applianceWallGap(def.kind));
     if (wallBack) {
@@ -278,7 +279,7 @@ function drawPlacingPreview() {
       };
       pos = { x: wallBack.x, y: wallBack.y };
     } else {
-      pos = snapWorldHalf(state.cursorWorld);
+      pos = snapWorld(state.cursorWorld);
       shape = {
         type: "appliance",
         x: pos.x - def.width / 2,
@@ -296,7 +297,7 @@ function drawPlacingPreview() {
   } else {
     const depthForAlign = sectionKey === "windows" ? DEFAULT_WINDOW_DEPTH_FT : 0;
     const aligned = detectAlignedPosition(state.cursorWorld, def.width, depthForAlign);
-    pos = aligned || snapWorldHalf(state.cursorWorld);
+    pos = aligned || snapWorld(state.cursorWorld);
     const angle = aligned ? aligned.angle : 0;
 
     if (sectionKey === "windows") {
@@ -368,16 +369,18 @@ function drawSelection() {
   }
 
   const handles = ob ? getHandlePositionsOriented(ob) : getHandlePositions(bbox);
-  // Lines collapse halfH to 0 — corner / mid-edge handles all overlap with E/W
-  // at the endpoints. Drop the duplicates so the user just sees two endpoint
-  // squares plus the rotation rings.
-  const degenerate = ob && ob.halfH < 1e-6;
+  // Line-like selection (thin line, thick wall, or measure): only the E/W
+  // endpoint handles make sense — the corner / mid-edge handles would
+  // anchor the *outer face* of a thick wall to the grid on snap, pulling
+  // the centerline off-grid. Same code path as a 1-D thin line, just
+  // gated on the shape type instead of halfH alone.
+  const lineLike = selectionIsLineLike() || (ob && ob.halfH < 1e-6);
   if (!hasOpeningSelected()) {
     ctx.fillStyle = "#fff";
     ctx.strokeStyle = SELECT_COLOR;
     ctx.lineWidth = 1.5;
     for (const name in handles) {
-      if (degenerate && name !== "e" && name !== "w") continue;
+      if (lineLike && name !== "e" && name !== "w") continue;
       const sp = worldToScreen(handles[name].x, handles[name].y);
       ctx.fillRect(sp.x - 4, sp.y - 4, 8, 8);
       ctx.strokeRect(sp.x - 4, sp.y - 4, 8, 8);

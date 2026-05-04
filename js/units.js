@@ -41,13 +41,21 @@ function loadSavedUnits() {
 // Idempotent — safe to call on init or every time the user toggles.
 function applyUnitsToUI() {
   applyUnitsToGridInput();
-  if (typeof populateScaleSelect === "function") populateScaleSelect();
-  if (typeof renderPalette === "function") renderPalette();
-  if (typeof renderSheetProperties === "function") renderSheetProperties();
-  if (typeof updateLineModal === "function") updateLineModal();
-  if (typeof updateDimModal === "function") updateDimModal();
-  if (typeof updateMeasureModal === "function") updateMeasureModal();
-  if (typeof render === "function") render();
+  applyUnitsToDimHint();
+  populateScaleSelect();
+  renderPalette();
+  renderSheetProperties();
+  updateLineModal();
+  updateDimModal();
+  updateMeasureModal();
+  render();
+}
+
+function applyUnitsToDimHint() {
+  const el = document.getElementById("dim-hint");
+  if (!el) return;
+  const example = state.units === "metric" ? "915 mm" : "3'-0\"";
+  el.innerHTML = `Type a size like <code>${example}</code> &middot; <kbd>Enter</kbd> to apply`;
 }
 
 function applyUnitsToGridInput() {
@@ -109,11 +117,18 @@ function showSettingsModal() {
   const radios = modal.querySelectorAll('input[name="settings-units"]');
   for (const r of radios) r.checked = (r.value === state.units);
   modal.classList.remove("hidden");
+  // Trap Tab inside the dialog window, not the .settings-modal backdrop —
+  // the backdrop's only interactive child is the window anyway, but the
+  // trap walks all focusables and we don't want it cycling into the
+  // backdrop's own pointerdown surface.
+  trapFocusIn(modal.querySelector(".settings-window") || modal);
 }
 
 function hideSettingsModal() {
   const modal = document.getElementById("settings-modal");
-  if (modal) modal.classList.add("hidden");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  releaseFocusTrap();
 }
 
 function bindSettingsModal() {

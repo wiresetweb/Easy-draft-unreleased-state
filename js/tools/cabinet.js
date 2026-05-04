@@ -318,26 +318,3 @@ function placeCabinetPoint(wp) {
   }
 }
 
-// Snap angle to the nearest 45° increment from world axes (the cabinet builder
-// requires every segment to land on a 0/45/90/...° heading).
-function snapAngleTo45(prev, cursor) {
-  const dx = cursor.x - prev.x;
-  const dy = cursor.y - prev.y;
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-6) return { x: prev.x, y: prev.y, len: 0 };
-  const ang = Math.atan2(dy, dx);
-  const step = Math.PI / 4;
-  const snappedAng = Math.round(ang / step) * step;
-  // Project the cursor's distance onto the snapped heading so the segment
-  // length tracks the cursor naturally.
-  const dirX = Math.cos(snappedAng);
-  const dirY = Math.sin(snappedAng);
-  const proj = dx * dirX + dy * dirY;
-  let newLen = Math.max(0, proj);
-  if (state.snap) newLen = Math.round(newLen / state.gridSize) * state.gridSize;
-  return {
-    x: prev.x + dirX * newLen,
-    y: prev.y + dirY * newLen,
-    len: newLen,
-  };
-}

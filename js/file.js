@@ -20,6 +20,15 @@ const hasFileSystemAccess =
   typeof window.showSaveFilePicker === "function" &&
   typeof window.showOpenFilePicker === "function";
 
+// True for the family of errors browsers throw when the user dismisses a
+// FileSystemAccess picker. AbortError is the spec name; some Chromium
+// versions throw NotAllowedError when a stale handle's permission prompt
+// gets cancelled. Either way it's a user gesture, not something to alert.
+function isFsCancelError(err) {
+  if (!err) return false;
+  return err.name === "AbortError" || err.name === "NotAllowedError";
+}
+
 function fileTypesFilter() {
   return [{
     description: "Drafting Studio drawing",
@@ -93,8 +102,7 @@ function loadDocument(data) {
   // this field, so default to whatever the visitor already has set rather
   // than forcing them back to imperial.
   if (data.units === "metric" || data.units === "imperial") {
-    if (typeof setUnits === "function") setUnits(data.units);
-    else state.units = data.units;
+    setUnits(data.units);
   }
 
   if (data.view && typeof data.view === "object") {
@@ -127,14 +135,14 @@ function loadDocument(data) {
   } else {
     state.sheets = [];
     state.activeSheetId = null;
-    if (typeof ensureSheets === "function") ensureSheets();
+    ensureSheets();
   }
   // Older saves predate the page-on-canvas feature — make sure every sheet
   // has a pageOrigin so the draft view has something to render.
-  if (typeof ensurePageOrigins === "function") ensurePageOrigins();
+  ensurePageOrigins();
   // Loading a different document shouldn't preserve the prior file's
   // pan/zoom — start fresh fitted to the canvas.
-  if (typeof resetPlanView === "function") resetPlanView();
+  resetPlanView();
 
   state.history.length = 0;
   state.future.length = 0;
@@ -147,14 +155,14 @@ function loadDocument(data) {
   state.curveDrag = null;
   state.cabinetBuilder = null;
   state.stairsDirection = null;
-  if (typeof resetCrossLayerMisses === "function") resetCrossLayerMisses();
+  resetCrossLayerMisses();
 
   renderLayerTree();
   updatePaletteVisibility();
-  if (typeof renderSheetList === "function") renderSheetList();
-  if (typeof renderSheetProperties === "function") renderSheetProperties();
-  if (typeof renderNotesEditor === "function") renderNotesEditor();
-  if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+  renderSheetList();
+  renderSheetProperties();
+  renderNotesEditor();
+  renderSheetLayerTree();
   render();
   return true;
 }
@@ -174,12 +182,12 @@ async function fileNew() {
   state.sheets = [];
   state.activeSheetId = null;
   addStory();
-  if (typeof ensureSheets === "function") ensureSheets();
-  if (typeof resetPlanView === "function") resetPlanView();
-  if (typeof renderSheetList === "function") renderSheetList();
-  if (typeof renderSheetProperties === "function") renderSheetProperties();
-  if (typeof renderNotesEditor === "function") renderNotesEditor();
-  if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+  ensureSheets();
+  resetPlanView();
+  renderSheetList();
+  renderSheetProperties();
+  renderNotesEditor();
+  renderSheetLayerTree();
   state.zoom = 1;
   state.pan = { x: 0, y: 0 };
   centerView();
@@ -206,8 +214,8 @@ async function fileOpen() {
         updateFileLabel();
       }
     } catch (err) {
-      // AbortError = user cancelled the picker; that's expected, not an error.
-      if (err && err.name !== "AbortError") {
+      // User cancelled the picker — silent. Anything else is a real error.
+      if (!isFsCancelError(err)) {
         console.error(err);
         alert("Couldn't open the file: " + (err.message || err));
       }
@@ -271,7 +279,7 @@ async function fileSaveAs() {
       state.fileName = handle.name;
       updateFileLabel();
     } catch (err) {
-      if (err && err.name !== "AbortError") {
+      if (!isFsCancelError(err)) {
         console.error(err);
         alert("Couldn't save: " + (err.message || err));
       }
@@ -408,10 +416,10 @@ function bindFileMenu() {
     else if (action === "save-as") fileSaveAs();
     else if (action === "export") fileExport();
     else if (action === "settings") {
-      if (typeof showSettingsModal === "function") showSettingsModal();
+      showSettingsModal();
     }
     else if (action === "walkthrough") {
-      if (typeof startTour === "function") startTour();
+      startTour();
     }
   });
 

@@ -287,10 +287,12 @@ function showStairsModal() {
   stairsWidthInput.value = formatFeet(DEFAULT_STAIRS_WIDTH_FT);
   stairsModal.classList.remove("hidden");
   setTimeout(() => stairsCeilingInput.focus(), 0);
+  trapFocusIn(stairsModal);
 }
 
 function hideStairsModal() {
   stairsModal.classList.add("hidden");
+  releaseFocusTrap();
 }
 
 function cancelStairs() {

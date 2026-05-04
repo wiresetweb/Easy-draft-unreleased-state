@@ -177,6 +177,7 @@ function renderLayerTree() {
     expandBtn.className = "icon-btn expand-btn";
     expandBtn.dataset.action = "expand";
     expandBtn.title = "Toggle expand";
+    expandBtn.setAttribute("aria-label", `Toggle ${story.name} expanded`);
     expandBtn.innerHTML = caretSvg();
     header.appendChild(expandBtn);
 
@@ -188,7 +189,10 @@ function renderLayerTree() {
     const visBtn = document.createElement("button");
     visBtn.className = "icon-btn vis-btn" + (story.visible ? "" : " muted");
     visBtn.dataset.action = "vis-story";
-    visBtn.title = story.visible ? "Hide story" : "Show story";
+    const visLabel = story.visible ? `Hide ${story.name}` : `Show ${story.name}`;
+    visBtn.title = visLabel;
+    visBtn.setAttribute("aria-label", visLabel);
+    visBtn.setAttribute("aria-pressed", String(!story.visible));
     visBtn.innerHTML = story.visible ? eyeSvg() : eyeOffSvg();
     header.appendChild(visBtn);
 
@@ -196,6 +200,7 @@ function renderLayerTree() {
     addBtn.className = "icon-btn";
     addBtn.dataset.action = "add-sub";
     addBtn.title = "Add sub-layer";
+    addBtn.setAttribute("aria-label", `Add sub-layer to ${story.name}`);
     addBtn.innerHTML = plusSvg();
     header.appendChild(addBtn);
 
@@ -206,6 +211,7 @@ function renderLayerTree() {
       delStoryBtn.className = "icon-btn delete-btn";
       delStoryBtn.dataset.action = "delete-story";
       delStoryBtn.title = "Delete story";
+      delStoryBtn.setAttribute("aria-label", `Delete ${story.name}`);
       delStoryBtn.innerHTML = trashSvg();
       header.appendChild(delStoryBtn);
     }
@@ -223,6 +229,7 @@ function renderLayerTree() {
       colorBtn.className = "color-bubble";
       colorBtn.dataset.action = "color-sub";
       colorBtn.title = "Layer color";
+      colorBtn.setAttribute("aria-label", `${sub.name} color`);
       colorBtn.style.background = sub.color || DEFAULT_LAYER_COLOR_FALLBACK;
       row.appendChild(colorBtn);
 
@@ -234,7 +241,10 @@ function renderLayerTree() {
       const subVis = document.createElement("button");
       subVis.className = "icon-btn vis-btn" + (sub.visible ? "" : " muted");
       subVis.dataset.action = "vis-sub";
-      subVis.title = sub.visible ? "Hide layer" : "Show layer";
+      const subVisLabel = sub.visible ? `Hide ${sub.name}` : `Show ${sub.name}`;
+      subVis.title = subVisLabel;
+      subVis.setAttribute("aria-label", subVisLabel);
+      subVis.setAttribute("aria-pressed", String(!sub.visible));
       subVis.innerHTML = sub.visible ? eyeSvg() : eyeOffSvg();
       row.appendChild(subVis);
 
@@ -242,6 +252,7 @@ function renderLayerTree() {
       delSub.className = "icon-btn delete-btn";
       delSub.dataset.action = "delete-sub";
       delSub.title = "Delete layer";
+      delSub.setAttribute("aria-label", `Delete ${sub.name}`);
       delSub.innerHTML = trashSvg();
       row.appendChild(delSub);
 

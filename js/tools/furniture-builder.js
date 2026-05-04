@@ -79,6 +79,7 @@ function openFurnitureBuilder() {
   builderModal.classList.remove("hidden");
   // The stage doesn't have a real size until it's visible — measure now.
   requestAnimationFrame(() => { fitBuilderCanvas(); renderBuilder(); });
+  trapFocusIn(builderModal);
 }
 
 function closeFurnitureBuilder() {
@@ -86,6 +87,7 @@ function closeFurnitureBuilder() {
   builderModal.classList.add("hidden");
   builder.pending = null;
   builder.drag = null;
+  releaseFocusTrap();
 }
 
 function setBuilderTool(tool) {
@@ -533,7 +535,7 @@ function saveCustomFurniture() {
 
   closeFurnitureBuilder();
   // Re-render the main canvas so a freshly-added piece shows up in the palette.
-  if (typeof render === "function") render();
+  render();
 }
 
 function primitivesBBox(prims) {
@@ -603,7 +605,7 @@ function syncCustomFurnitureToPalette() {
       primitives: piece.primitives,
     });
   }
-  if (typeof renderPalette === "function") renderPalette();
+  renderPalette();
 }
 
 // ---------- key handling (modal-local) ----------

@@ -120,11 +120,9 @@ function defaultPageOriginForNewSheet(paperSizeKey, orientation) {
   const phFt = dim.h / ipf;
   let cx = 0, cy = 0;
   try {
-    if (typeof viewSize === "function" && typeof screenToWorld === "function") {
-      const v = viewSize();
-      const c = screenToWorld(v.w / 2, v.h / 2);
-      if (isFinite(c.x) && isFinite(c.y)) { cx = c.x; cy = c.y; }
-    }
+    const v = viewSize();
+    const c = screenToWorld(v.w / 2, v.h / 2);
+    if (isFinite(c.x) && isFinite(c.y)) { cx = c.x; cy = c.y; }
   } catch (_) { /* canvas not ready yet */ }
   return { x: cx - pwFt / 2, y: cy - phFt / 2 };
 }
@@ -328,8 +326,17 @@ function preservingPageCenter(sheet, mutate) {
   sheet.pageOrigin = { x: center.x - after.w / 2, y: center.y - after.h / 2 };
 }
 
+// viewSize() reads the canvas bounding rect, which forces a layout flush.
+// renderPlanView() calls paperFitPpi → paperFitPpiBase dozens of times
+// (title block, every cell, every measurement) — all with the same view.
+// Stash once at the top of the render and reuse for every downstream call.
+let _planRenderViewCache = null;
+function planRenderViewSize() {
+  return _planRenderViewCache || viewSize();
+}
+
 function paperFitPpiBase(sheet) {
-  const view = viewSize();
+  const view = planRenderViewSize();
   const dim = paperDimensionsIn(sheet);
   const sx = (view.w - PAPER_FIT_PADDING_PX * 2) / dim.w;
   const sy = (view.h - PAPER_FIT_PADDING_PX * 2) / dim.h;
@@ -355,7 +362,10 @@ function planPan() {
 function renderPlanView() {
   ensureSheets();
   const sheet = activeSheet();
+  // Read the canvas size once and stash it for every downstream
+  // paperFitPpi / planRenderViewSize() call in this render pass.
   const view = viewSize();
+  _planRenderViewCache = view;
 
   ctx.save();
   if (!state.printContext) {
@@ -441,6 +451,7 @@ function renderPlanView() {
   }
 
   ctx.restore();
+  _planRenderViewCache = null;
 }
 
 // ==============================================================================
@@ -452,23 +463,21 @@ function renderPlanView() {
 function collectScheduleData() {
   const doorGroups = new Map();
   const windowGroups = new Map();
-  if (typeof forEachShape === "function") {
-    forEachShape((sh) => {
-      if (sh.type === "door") {
-        // Group identical doors by catalog name (or subtype + width as a
-        // last resort for hand-edited shapes).
-        const key = sh.kind || `${sh.subtype || "Swing"} ${formatFeet(sh.width)}`;
-        const g = doorGroups.get(key) || { kind: key, width: sh.width || 0, count: 0 };
-        g.count += 1;
-        doorGroups.set(key, g);
-      } else if (sh.type === "window") {
-        const key = sh.kind || `Window ${formatFeet(sh.width)}`;
-        const g = windowGroups.get(key) || { kind: key, width: sh.width || 0, count: 0 };
-        g.count += 1;
-        windowGroups.set(key, g);
-      }
-    });
-  }
+  forEachShape((sh) => {
+    if (sh.type === "door") {
+      // Group identical doors by catalog name (or subtype + width as a
+      // last resort for hand-edited shapes).
+      const key = sh.kind || `${sh.subtype || "Swing"} ${formatFeet(sh.width)}`;
+      const g = doorGroups.get(key) || { kind: key, width: sh.width || 0, count: 0 };
+      g.count += 1;
+      doorGroups.set(key, g);
+    } else if (sh.type === "window") {
+      const key = sh.kind || `Window ${formatFeet(sh.width)}`;
+      const g = windowGroups.get(key) || { kind: key, width: sh.width || 0, count: 0 };
+      g.count += 1;
+      windowGroups.set(key, g);
+    }
+  });
 
   // Display the catalog kind in the user's current units. The grouping key
   // is still the original (English) kind, so two doors placed under different
@@ -1034,31 +1043,44 @@ function drawTitleBlockSection(kind, sheet, x, y, w, h, ppi) {
   const tb = sheet.titleBlock || {};
 
   if (kind === "firm") {
-    // Drafting Studio brand mark + label. Sized to fit the narrower title
-    // strip — "DRAFTING STUDIO" at 0.11" wraps under the brand dot, and
-    // the tagline drops to 0.06" so the section reads without crowding.
+    // Brand mark: actual product logo on top, "DRAFTING STUDIO" under it,
+    // tagline at the bottom. The logo image is preloaded by main.js
+    // (ensureWatermarkLogo) — if it hasn't loaded yet for some reason, we
+    // fall back to a small orange/slate gradient dot so the layout doesn't
+    // collapse and the section still reads as branded.
     const cx = x + w / 2;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    const dotR = Math.max(3, 0.12 * ppi);
-    // Brand mark — slate-deep at top blending into orange at bottom. Picks
-    // up both halves of the new palette in a tiny dot that prints cleanly.
-    const grad = ctx.createLinearGradient(cx - dotR, y + h * 0.28 - dotR, cx + dotR, y + h * 0.28 + dotR);
-    grad.addColorStop(0, "#2F4156");
-    grad.addColorStop(1, "#E8602C");
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cx, y + h * 0.28, dotR, 0, Math.PI * 2);
-    ctx.fill();
+    const logo = ensureWatermarkLogo();
+    const logoCenterY = y + h * 0.32;
+    if (logo && logo.complete && logo.naturalWidth > 0) {
+      // Constrain to ~75% of cell width and ~45% of cell height. Whichever
+      // is binding wins; aspect ratio preserved either way.
+      const maxW = w * 0.75;
+      const maxH = h * 0.45;
+      const aspect = logo.naturalWidth / logo.naturalHeight;
+      let lw = maxW, lh = maxW / aspect;
+      if (lh > maxH) { lh = maxH; lw = maxH * aspect; }
+      ctx.drawImage(logo, cx - lw / 2, logoCenterY - lh / 2, lw, lh);
+    } else {
+      const dotR = Math.max(3, 0.12 * ppi);
+      const grad = ctx.createLinearGradient(cx - dotR, logoCenterY - dotR, cx + dotR, logoCenterY + dotR);
+      grad.addColorStop(0, "#2F4156");
+      grad.addColorStop(1, "#E8602C");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, logoCenterY, dotR, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.fillStyle = "#1A2A36";
     ctx.font = `700 ${Math.round(0.11 * ppi)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.fillText("DRAFTING STUDIO", cx, y + h * 0.62);
+    ctx.fillText("DRAFTING STUDIO", cx, y + h * 0.72);
 
     ctx.fillStyle = "#4A6274";
     ctx.font = `${Math.round(0.07 * ppi)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.fillText("Residential Drafting", cx, y + h * 0.84);
+    ctx.fillText("Residential Drafting", cx, y + h * 0.90);
   } else if (kind === "project") {
     drawTBField("Project", tb.project || "—", x + padX, y + padY, w - padX * 2, h * 0.5 - padY, ppi, sheet);
     drawTBField("Address", tb.address || "—", x + padX, y + h * 0.5, w - padX * 2, h * 0.5 - padY, ppi, sheet);
@@ -1246,7 +1268,7 @@ function setViewMode(mode) {
     state.selectionData = null;
     state.curveDrag = null;
     state.stairsDirection = null;
-    if (typeof hideLayerHintModal === "function") hideLayerHintModal();
+    hideLayerHintModal();
     ensureSheets();
   }
 
@@ -1458,10 +1480,10 @@ function captureAllSheetsForPrint(dpi) {
     ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
     fitCanvas();
     // Refresh the Plan-mode UI in case the active sheet was cycled past.
-    if (typeof renderSheetList === "function") renderSheetList();
-    if (typeof renderSheetProperties === "function") renderSheetProperties();
-    if (typeof renderNotesEditor === "function") renderNotesEditor();
-    if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+    renderSheetList();
+    renderSheetProperties();
+    renderNotesEditor();
+    renderSheetLayerTree();
     render();
   }
   return pages;
@@ -1692,7 +1714,7 @@ function planWheel(e) {
     }
   }
 
-  if (typeof renderSheetProperties === "function") renderSheetProperties();
+  renderSheetProperties();
   render();
 }
 
@@ -2095,14 +2117,18 @@ function renderSheetList() {
     // Eye toggle for the page outline on the draft canvas. Only drawing
     // sheets have a page rect to show; schedule / index sheets don't get
     // the button at all (would be a dead control).
+    const sheetLabel = ((sheet.number || "").trim() || "sheet") + " " + (sheet.name || "");
     if ((sheet.sheetType || "drawing") === "drawing") {
       const visible = !!sheet.pageOutlineVisible;
       const visBtn = document.createElement("button");
       visBtn.className = "icon-btn vis-btn" + (visible ? "" : " muted");
       visBtn.dataset.sheetAction = "toggle-visibility";
-      visBtn.title = visible
+      const visLabel = visible
         ? "Hide page outline on the draft canvas"
         : "Show page outline on the draft canvas";
+      visBtn.title = visLabel;
+      visBtn.setAttribute("aria-label", `${visLabel} for ${sheetLabel}`);
+      visBtn.setAttribute("aria-pressed", String(visible));
       visBtn.innerHTML = visible ? eyeSvg() : eyeOffSvg();
       row.appendChild(visBtn);
     }
@@ -2111,6 +2137,7 @@ function renderSheetList() {
     renameBtn.className = "icon-btn";
     renameBtn.dataset.sheetAction = "rename";
     renameBtn.title = "Rename";
+    renameBtn.setAttribute("aria-label", `Rename ${sheetLabel}`);
     renameBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
     row.appendChild(renameBtn);
 
@@ -2118,6 +2145,7 @@ function renderSheetList() {
     delBtn.className = "icon-btn delete-btn";
     delBtn.dataset.sheetAction = "delete";
     delBtn.title = "Delete sheet";
+    delBtn.setAttribute("aria-label", `Delete ${sheetLabel}`);
     delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
     row.appendChild(delBtn);
 
