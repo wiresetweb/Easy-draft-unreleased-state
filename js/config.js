@@ -11,3 +11,7 @@
 
 const SUPABASE_URL = "https://dpghsqmdnvwxyaeojbfx.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_DZAup0w4vG7gsRddZpmQQQ_eXNR8zzu";
+
+// Where the Buy Pro button + the upgrade prompts on free-user exports
+// link to. Open in a new tab so the user doesn't lose their drawing.
+const CHECKOUT_URL = "https://easydraftonline.com/buy";

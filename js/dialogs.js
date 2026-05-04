@@ -173,6 +173,21 @@ function appConfirm(message, opts = {}) {
   }).then((r) => r.button);
 }
 
+// Three-button choice dialog — caller defines each button's label + the
+// value it resolves to. Used for "Buy Pro / Export anyway / Cancel"
+// style flows where binary confirm doesn't capture the choice space.
+//
+// buttons: [{ label, value, primary?, danger?, cancel? }]
+// Resolves to the value of whichever button is clicked, or the cancel
+// button's value if the user hits Esc / clicks the backdrop.
+function appChoice(message, buttons, opts = {}) {
+  return _showDialog({
+    title: opts.title || "Easy Draft",
+    message,
+    buttons,
+  }).then((r) => r.button);
+}
+
 function appPrompt(message, defaultValue = "", opts = {}) {
   return _showDialog({
     title: opts.title || "Easy Draft",

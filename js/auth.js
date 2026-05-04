@@ -29,22 +29,36 @@
 // window to roughly the time it takes one network round-trip to complete.
 state.paid = false;
 
-// Topbar badge — flips between "Free" and "Pro" based on state.paid. Safe
-// to call before the DOM is fully painted (no-ops if the element isn't
-// there yet) so callers don't have to know about init ordering.
+// Topbar badge + Buy Pro link — flip between "Free" / "Pro" based on
+// state.paid. Safe to call before the DOM is fully painted (no-ops if
+// the elements aren't there yet) so callers don't have to know about
+// init ordering.
 function updatePlanBadge() {
   const el = document.getElementById("plan-badge");
-  if (!el) return;
-  if (state.paid) {
-    el.textContent = "Pro";
-    el.classList.remove("plan-badge-free");
-    el.classList.add("plan-badge-pro");
-    el.title = "Pro version — exports are clean";
-  } else {
-    el.textContent = "Free";
-    el.classList.remove("plan-badge-pro");
-    el.classList.add("plan-badge-free");
-    el.title = "Free version — exports are watermarked";
+  const buyLink = document.getElementById("buy-pro-link");
+  if (el) {
+    if (state.paid) {
+      el.textContent = "Pro";
+      el.classList.remove("plan-badge-free");
+      el.classList.add("plan-badge-pro");
+      el.title = "Pro version — exports are clean";
+    } else {
+      el.textContent = "Free";
+      el.classList.remove("plan-badge-pro");
+      el.classList.add("plan-badge-free");
+      el.title = "Free version — exports are watermarked";
+    }
+  }
+  if (buyLink) {
+    if (state.paid) {
+      buyLink.hidden = true;
+    } else {
+      buyLink.hidden = false;
+      // Pull the URL fresh each time so config.js edits don't require
+      // a hard reload to pick up.
+      const url = (typeof CHECKOUT_URL === "string" && CHECKOUT_URL) ? CHECKOUT_URL : "#";
+      buyLink.href = url;
+    }
   }
 }
 
