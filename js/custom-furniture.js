@@ -12,7 +12,7 @@
 window.CUSTOM_FURNITURE_LIBRARY = [
   {
     "id": "cf-2ms2g7o",
-    "name": "Vanity 24\" (Custom)",
+    "name": "Vanity 24\"",
     "width": 2,
     "depth": 1.75,
     "primitives": [
@@ -58,7 +58,7 @@ window.CUSTOM_FURNITURE_LIBRARY = [
   },
   {
     "id": "cf-h36b7h3",
-    "name": "Vanity 30\" (Custom)",
+    "name": "Vanity 30\"",
     "width": 2.5,
     "depth": 1.75,
     "primitives": [
@@ -1257,7 +1257,7 @@ window.CUSTOM_FURNITURE_LIBRARY = [
   },
   {
     "id": "cf-c0t18am",
-    "name": "Vanity 36\" (Custom)",
+    "name": "Vanity 36\"",
     "width": 3,
     "depth": 1.75,
     "primitives": [
@@ -1303,7 +1303,7 @@ window.CUSTOM_FURNITURE_LIBRARY = [
   },
   {
     "id": "cf-nrixrsg",
-    "name": "Double Vanity 60\" (Custom)",
+    "name": "Double Vanity 60\"",
     "width": 5,
     "depth": 1.75,
     "primitives": [
@@ -1379,7 +1379,7 @@ window.CUSTOM_FURNITURE_LIBRARY = [
   },
   {
     "id": "cf-k0kmu3u",
-    "name": "Double Vanity 72\" (Custom)",
+    "name": "Double Vanity 72\"",
     "width": 6,
     "depth": 1.75,
     "primitives": [

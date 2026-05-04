@@ -339,7 +339,10 @@ const PALETTE_LAYERS = {
   },
   [FURNITURE_LAYER_NAME]: {
     title: "Furniture",
-    sections: ["furniture"],
+    // One section per room — items that read in multiple rooms (TVs, floor
+    // lamps, bookshelves) appear in each so the user finds them wherever
+    // they expect to look.
+    sections: ["livingRoom", "bedroom", "diningRoom", "office", "laundry"],
     tools: [
       {
         id: "furniture-builder",
@@ -351,12 +354,34 @@ const PALETTE_LAYERS = {
   [BATHROOM_LAYER_NAME]: { title: "Bathroom", sections: ["bathroom"] },
 };
 const PALETTE_SECTION_LABELS = {
-  doors:     "Doors",
-  windows:   "Windows",
-  kitchen:   "Appliances",
-  furniture: "Furniture",
-  bathroom:  "Fixtures",
+  doors:      "Doors",
+  windows:    "Windows",
+  kitchen:    "Appliances",
+  bathroom:   "Fixtures",
+  livingRoom: "Living Room",
+  bedroom:    "Bedroom",
+  diningRoom: "Dining Room",
+  office:     "Office",
+  laundry:    "Laundry & Utility",
 };
+
+// Sections whose items place as appliance-style shapes (snap to walls,
+// share the wall-back placement / fork-into-builder UI). Anything outside
+// this set falls back to door / window placement rules.
+const APPLIANCE_PALETTE_SECTIONS = new Set([
+  "kitchen", "bathroom",
+  "livingRoom", "bedroom", "diningRoom", "office", "laundry",
+]);
+function isAppliancePaletteSection(key) {
+  return APPLIANCE_PALETTE_SECTIONS.has(key);
+}
+
+// All sections whose contents come from the Furniture layer. Used to
+// decide where the "Export library" footer button appears, which custom
+// pieces show edit pencils, etc.
+const FURNITURE_PALETTE_SECTIONS = new Set([
+  "livingRoom", "bedroom", "diningRoom", "office", "laundry",
+]);
 
 // Render a custom piece's primitives into a 48×26 SVG that fits the palette
 // thumbnail. The primitives are stored centered at (0, 0) in feet — we just
@@ -539,8 +564,7 @@ function renderPalette() {
       // into a new custom piece so the user can tweak the procedural
       // drawing as a starting point. Doors / windows aren't editable yet.
       const isCustom = item.kind === "custom" && item.customId;
-      const isForkable = !isCustom && item.kind &&
-        (sectionKey === "kitchen" || sectionKey === "furniture" || sectionKey === "bathroom");
+      const isForkable = !isCustom && item.kind && isAppliancePaletteSection(sectionKey);
       if (isCustom || isForkable) {
         const editBtn = document.createElement("button");
         editBtn.className = "palette-item-edit";
@@ -564,10 +588,13 @@ function renderPalette() {
 
     section.appendChild(content);
 
-    // Export button for the Furniture section so the user can dump the
-    // whole library to disk in one go after a session of building /
-    // editing — far less tedious than the old per-save auto-download.
-    if (sectionKey === "furniture") {
+    // Export-library button anchored to the last Furniture-layer section
+    // so it shows up exactly once at the bottom of the panel, regardless
+    // of which sections happen to be expanded.
+    const isLastFurnitureSection =
+      FURNITURE_PALETTE_SECTIONS.has(sectionKey) &&
+      spec.sections.indexOf(sectionKey) === spec.sections.length - 1;
+    if (isLastFurnitureSection) {
       const footer = document.createElement("div");
       footer.className = "palette-section-footer";
       const lib = Array.isArray(window.CUSTOM_FURNITURE_LIBRARY) ? window.CUSTOM_FURNITURE_LIBRARY : [];
@@ -782,7 +809,7 @@ function placeItem(def, sectionKey, worldPos) {
   const layer = activeSublayer();
   if (!layer) return;
 
-  if (sectionKey === "kitchen" || sectionKey === "furniture" || sectionKey === "bathroom") {
+  if (isAppliancePaletteSection(sectionKey)) {
     let x, y, angle;
     const wallBack = paletteSkipsWallSnap(sectionKey, def)
       ? null

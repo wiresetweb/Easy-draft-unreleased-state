@@ -1235,24 +1235,82 @@ window.CUSTOM_FURNITURE_LIBRARY = `;
 }
 
 // ---------- palette sync ----------
-// Pull library entries into PALETTE_ITEMS.furniture so the palette panel shows
-// custom pieces alongside the built-ins. Idempotent — safe to re-run any time
-// the library mutates.
+// Pull library entries into the palette panel so custom pieces show up
+// alongside the built-ins. Idempotent — safe to re-run any time the library
+// mutates. Each piece is routed to one or more room sections based on its
+// name; pieces we don't recognize fall back to Living Room so the user can
+// still find them.
+const CUSTOM_FURNITURE_SECTION_MAP = {
+  // Bedroom
+  "Single Bed":    ["bedroom"],
+  "Full Bed":      ["bedroom"],
+  "Queen Bed":     ["bedroom"],
+  "King Bed":      ["bedroom"],
+  "Baby Crib":     ["bedroom"],
+  "Nightstand":    ["bedroom"],
+  "Single Dresser": ["bedroom"],
+  "Double Dresser": ["bedroom"],
+  // Living room
+  "Single Armchair":            ["livingRoom"],
+  "Loveseat":                   ["livingRoom"],
+  "Sofa":                       ["livingRoom"],
+  "Ottoman":                    ["livingRoom"],
+  "Recliner":                   ["livingRoom"],
+  "Coffee Table (Rectangle)":   ["livingRoom"],
+  "Coffee Table (Oval)":        ["livingRoom"],
+  "Coffee Table (Round)":       ["livingRoom"],
+  "End Table":                  ["livingRoom"],
+  "Fireplace":                  ["livingRoom"],
+  // Cross-room: bookshelves go in both living room and office
+  "Bookshelf":                  ["livingRoom", "office"],
+  // Dining
+  "Dining Chair":          ["diningRoom"],
+  "Stool":                 ["diningRoom"],
+  "Dining Table (4 Seat)": ["diningRoom"],
+  "Dining Table (6 Seat)": ["diningRoom"],
+  // Office
+  "Office Chair":   ["office"],
+  "Desk":           ["office"],
+  "Filing Cabinet": ["office"],
+  // Laundry / utility
+  "Water Heater":         ["laundry"],
+  "Washer 27\" (Custom)": ["laundry"],
+  "Dryer 27\" (Custom)":  ["laundry"],
+  // Bathroom — vanities had their "(Custom)" suffix stripped in the
+  // library so they appear here under their canonical name and replace
+  // the procedural built-ins.
+  "Vanity 24\"":         ["bathroom"],
+  "Vanity 30\"":         ["bathroom"],
+  "Vanity 36\"":         ["bathroom"],
+  "Double Vanity 60\"":  ["bathroom"],
+  "Double Vanity 72\"":  ["bathroom"],
+};
+
+const CUSTOM_FURNITURE_TARGET_SECTIONS = [
+  "livingRoom", "bedroom", "diningRoom", "office", "laundry", "bathroom",
+];
+
 function syncCustomFurnitureToPalette() {
   if (typeof PALETTE_ITEMS === "undefined") return;
-  if (!Array.isArray(PALETTE_ITEMS.furniture)) return;
   // Strip any existing custom entries so we don't duplicate when re-syncing.
-  PALETTE_ITEMS.furniture = PALETTE_ITEMS.furniture.filter((it) => it.kind !== "custom");
+  for (const sec of CUSTOM_FURNITURE_TARGET_SECTIONS) {
+    if (!Array.isArray(PALETTE_ITEMS[sec])) PALETTE_ITEMS[sec] = [];
+    PALETTE_ITEMS[sec] = PALETTE_ITEMS[sec].filter((it) => it.kind !== "custom");
+  }
   const lib = Array.isArray(window.CUSTOM_FURNITURE_LIBRARY) ? window.CUSTOM_FURNITURE_LIBRARY : [];
   for (const piece of lib) {
-    PALETTE_ITEMS.furniture.push({
-      name: piece.name,
-      kind: "custom",
-      width: piece.width,
-      depth: piece.depth,
-      customId: piece.id,
-      primitives: piece.primitives,
-    });
+    const targets = CUSTOM_FURNITURE_SECTION_MAP[piece.name] || ["livingRoom"];
+    for (const sec of targets) {
+      if (!Array.isArray(PALETTE_ITEMS[sec])) PALETTE_ITEMS[sec] = [];
+      PALETTE_ITEMS[sec].push({
+        name: piece.name,
+        kind: "custom",
+        width: piece.width,
+        depth: piece.depth,
+        customId: piece.id,
+        primitives: piece.primitives,
+      });
+    }
   }
   renderPalette();
 }
