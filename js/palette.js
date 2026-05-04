@@ -533,16 +533,28 @@ function renderPalette() {
       name.textContent = paletteItemDisplayName(item);
       itemEl.appendChild(name);
 
-      // Custom-built furniture pieces get an Edit pencil that re-opens
-      // the builder pre-loaded with the piece. Click is wired in the
-      // palette-body click handler so we can stop drag-to-place from
-      // also firing on the same click.
-      if (item.kind === "custom" && item.customId) {
+      // Edit pencil — opens the Furniture Builder pre-loaded with this
+      // piece's primitives. Custom pieces edit-in-place by id; built-ins
+      // (kitchen / furniture / bathroom items with a `kind`) get forked
+      // into a new custom piece so the user can tweak the procedural
+      // drawing as a starting point. Doors / windows aren't editable yet.
+      const isCustom = item.kind === "custom" && item.customId;
+      const isForkable = !isCustom && item.kind &&
+        (sectionKey === "kitchen" || sectionKey === "furniture" || sectionKey === "bathroom");
+      if (isCustom || isForkable) {
         const editBtn = document.createElement("button");
         editBtn.className = "palette-item-edit";
-        editBtn.dataset.editId = item.customId;
-        editBtn.title = `Edit ${item.name}`;
-        editBtn.setAttribute("aria-label", `Edit ${item.name}`);
+        if (isCustom) {
+          editBtn.dataset.editId = item.customId;
+        } else {
+          editBtn.dataset.editKind = item.kind;
+          editBtn.dataset.editName = item.name;
+          editBtn.dataset.editWidth = String(item.width || 0);
+          editBtn.dataset.editDepth = String(item.depth || 0);
+        }
+        const verb = isCustom ? "Edit" : "Edit a copy of";
+        editBtn.title = `${verb} ${item.name}`;
+        editBtn.setAttribute("aria-label", `${verb} ${item.name}`);
         editBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
         itemEl.appendChild(editBtn);
       }
@@ -691,7 +703,18 @@ function bindPalettePanel() {
     const editBtn = e.target.closest(".palette-item-edit");
     if (editBtn) {
       e.stopPropagation();
-      openFurnitureBuilder({ editId: editBtn.dataset.editId });
+      if (editBtn.dataset.editId) {
+        openFurnitureBuilder({ editId: editBtn.dataset.editId });
+      } else if (editBtn.dataset.editKind) {
+        openFurnitureBuilder({
+          forkBuiltIn: {
+            kind:  editBtn.dataset.editKind,
+            name:  editBtn.dataset.editName,
+            width: parseFloat(editBtn.dataset.editWidth) || 0,
+            depth: parseFloat(editBtn.dataset.editDepth) || 0,
+          },
+        });
+      }
       return;
     }
     const action = e.target.closest("[data-palette-action]");
