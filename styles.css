@@ -1149,6 +1149,42 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+/* Edit pencil shown next to custom-built furniture pieces. Stays muted
+   until hover so it doesn't pull focus away from the palette icon. */
+.palette-item-edit {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 2px 4px;
+  margin-left: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.palette-item-edit:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+/* Section footer used for the Furniture "Export library" button. Sits
+   below the palette items, full-width, so the click target reads as a
+   distinct row rather than another palette tool. */
+.palette-section-footer {
+  padding: 6px 4px 8px;
+  border-top: 1px dashed var(--border);
+  margin-top: 4px;
+}
+.palette-section-footer .palette-tool-btn { width: 100%; }
+.palette-export-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .palette-resize {
   position: absolute;
   bottom: 0;
@@ -1639,6 +1675,11 @@ kbd {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   outline: none;
+}
+.builder-prop-readonly {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 
 .builder-status {

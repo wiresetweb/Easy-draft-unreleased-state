@@ -333,7 +333,9 @@ function drawCustomFurnitureInterior(sh, c, scale) {
         ctx.rect(x, y, w, h);
       }
     } else if (p.type === "circle") {
-      ctx.arc(p.cx * scale, p.cy * scale, p.r * scale, 0, Math.PI * 2);
+      const rx = (p.rx || p.r || 0) * scale;
+      const ry = (p.ry || p.r || 0) * scale;
+      ctx.ellipse(p.cx * scale, p.cy * scale, rx, ry, 0, 0, Math.PI * 2);
     }
     ctx.stroke();
   }
