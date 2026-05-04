@@ -2249,6 +2249,120 @@ body.demo-mode #layer-hint-modal {
 body.demo-mode .tour-card { display: none !important; }
 
 /* ============================================================
+   In-app dialogs — branded replacement for native alert/
+   confirm/prompt. Container (.app-dialog) is the dimmed
+   backdrop; .app-dialog-window is the centered card that
+   gets focus-trapped when the dialog is up. js/dialogs.js
+   builds the window contents per call.
+   ============================================================ */
+
+.app-dialog {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 42, 54, 0.45);
+  z-index: 1200;
+}
+.app-dialog.hidden { display: none; }
+
+.app-dialog-window {
+  width: min(440px, calc(100vw - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 48px rgba(26, 42, 54, 0.32);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-dialog-title {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.app-dialog-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.app-dialog-message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.app-dialog-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+.app-dialog-input:focus {
+  border-color: var(--accent);
+  background: #fff;
+}
+
+.app-dialog-actions {
+  padding: 10px 14px 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.app-dialog-btn {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 80ms ease;
+}
+.app-dialog-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.app-dialog-btn:active { transform: translateY(1px); }
+.app-dialog-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+.app-dialog-btn.primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.app-dialog-btn.primary.danger {
+  background: #c53030;
+  border-color: #c53030;
+}
+.app-dialog-btn.primary.danger:hover {
+  background: #9b2c2c;
+  border-color: #9b2c2c;
+}
+
+/* ============================================================
    Settings modal — File → Settings… opens a centered card with
    the unit-system toggle (and any future global preferences).
    ============================================================ */

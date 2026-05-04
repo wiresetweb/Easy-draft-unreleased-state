@@ -146,7 +146,10 @@ function applyCabinetDepthInput() {
 
 function startCabinetBuilder() {
   const layer = activeSublayer();
-  if (!layer) { alert("Select a layer to build cabinets on."); return; }
+  if (!layer) {
+    appAlert("Select a layer to build cabinets on.", { title: "No active layer" });
+    return;
+  }
   const story = activeStory();
   if (!story) return;
 

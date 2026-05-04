@@ -115,7 +115,7 @@ function bindEvents() {
     render();
   });
 
-  layerTreeEl.addEventListener("click", (e) => {
+  layerTreeEl.addEventListener("click", async (e) => {
     const actionBtn = e.target.closest("[data-action]");
     const subRow = e.target.closest(".sub-row");
     const storyEl = e.target.closest(".story");
@@ -138,7 +138,10 @@ function bindEvents() {
         renderSheetLayerTree();
         render();
       } else if (action === "add-sub") {
-        const name = prompt("Name for new sub-layer:", "New Layer");
+        const name = await appPrompt("Name for new sub-layer:", "New Layer", {
+          title: "New sub-layer",
+          confirmLabel: "Add",
+        });
         if (name && name.trim()) {
           pushHistory();
           addSublayer(story.id, name.trim());
@@ -163,7 +166,11 @@ function bindEvents() {
         const detail = shapeCount === 0
           ? "It contains no objects."
           : `This will also remove ${shapeCount} object${shapeCount === 1 ? "" : "s"} on its layers.`;
-        const ok = confirm(`Delete "${story.name}"?\n\n${detail}\n\nYou can undo with Ctrl+Z.`);
+        const ok = await appConfirm(`${detail}\n\nYou can undo with Ctrl+Z.`, {
+          title: `Delete "${story.name}"?`,
+          confirmLabel: "Delete",
+          danger: true,
+        });
         if (!ok) return;
         pushHistory();
         if (deleteStory(story.id)) {
@@ -177,7 +184,11 @@ function bindEvents() {
         const detail = sub.shapes.length === 0
           ? "It's empty."
           : `This will also remove ${sub.shapes.length} object${sub.shapes.length === 1 ? "" : "s"} on it.`;
-        const ok = confirm(`Delete the "${sub.name}" layer from ${story.name}?\n\n${detail}\n\nYou can undo with Ctrl+Z.`);
+        const ok = await appConfirm(`${detail}\n\nYou can undo with Ctrl+Z.`, {
+          title: `Delete "${sub.name}" from ${story.name}?`,
+          confirmLabel: "Delete",
+          danger: true,
+        });
         if (!ok) return;
         pushHistory();
         if (deleteSublayer(story.id, sub.id)) {
@@ -223,14 +234,18 @@ function bindEvents() {
 
   undoBtn.addEventListener("click", undo);
   redoBtn.addEventListener("click", redo);
-  clearBtn.addEventListener("click", () => {
+  clearBtn.addEventListener("click", async () => {
     const layer = activeSublayer();
     if (!layer || !layer.shapes.length) return;
     const count = layer.shapes.length;
     const noun = count === 1 ? "object" : "objects";
-    const ok = confirm(
-      `Clear all ${count} ${noun} on the "${layer.name}" layer?\n\n` +
-      `This removes everything on this layer (you can undo with Ctrl+Z).`
+    const ok = await appConfirm(
+      `Remove all ${count} ${noun} on this layer? You can undo with Ctrl+Z.`,
+      {
+        title: `Clear "${layer.name}" layer?`,
+        confirmLabel: "Clear",
+        danger: true,
+      },
     );
     if (!ok) return;
     pushHistory();

@@ -401,9 +401,14 @@ function deleteSelectedPrimitive() {
   renderBuilder();
 }
 
-function clearBuilder() {
+async function clearBuilder() {
   if (builder.primitives.length === 0) return;
-  if (!confirm("Clear all primitives?")) return;
+  const ok = await appConfirm("Remove every shape on the canvas. You can't undo this.", {
+    title: "Clear all primitives?",
+    confirmLabel: "Clear",
+    danger: true,
+  });
+  if (!ok) return;
   builder.primitives = [];
   builder.selection = null;
   builder.pending = null;
@@ -688,10 +693,17 @@ function pathRoundedRectAbs(ctx, x, y, w, h, r) {
 }
 
 // ---------- save flow ----------
-function saveCustomFurniture() {
+async function saveCustomFurniture() {
   const name = (builderNameInput.value || "").trim();
-  if (!name) { alert("Give the piece a name first."); builderNameInput.focus(); return; }
-  if (builder.primitives.length === 0) { alert("Draw at least one shape before saving."); return; }
+  if (!name) {
+    await appAlert("Give the piece a name first.", { title: "Name required" });
+    builderNameInput.focus();
+    return;
+  }
+  if (builder.primitives.length === 0) {
+    await appAlert("Draw at least one shape before saving.", { title: "Nothing to save" });
+    return;
+  }
 
   // Compute bbox of all primitives, then translate them so origin = bbox center.
   const bbox = primitivesBBox(builder.primitives);

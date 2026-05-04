@@ -75,7 +75,7 @@ function serializeDocument() {
 
 function loadDocument(data) {
   if (!data || typeof data !== "object" || !Array.isArray(data.stories)) {
-    alert("That file doesn't look like a Drafting Studio drawing.");
+    appAlert("That file doesn't look like a Drafting Studio drawing.", { title: "Couldn't open file" });
     return false;
   }
   // Rehydrate stories with defensive defaults so older / hand-edited files
@@ -170,7 +170,11 @@ function loadDocument(data) {
 // ---------- File operations ----------
 
 async function fileNew() {
-  const ok = confirm("Start a new drawing?\n\nUnsaved changes will be lost.");
+  const ok = await appConfirm("Start a new drawing?\n\nUnsaved changes will be lost.", {
+    title: "New drawing",
+    confirmLabel: "Start new",
+    danger: true,
+  });
   if (!ok) return;
   state.stories.length = 0;
   state.activeSublayerId = null;
@@ -217,7 +221,7 @@ async function fileOpen() {
       // User cancelled the picker — silent. Anything else is a real error.
       if (!isFsCancelError(err)) {
         console.error(err);
-        alert("Couldn't open the file: " + (err.message || err));
+        appAlert("Couldn't open the file: " + (err.message || err), { title: "Couldn't open file" });
       }
     }
     return;
@@ -239,7 +243,7 @@ async function fileOpen() {
       }
     } catch (err) {
       console.error(err);
-      alert("Couldn't open the file: " + (err.message || err));
+      appAlert("Couldn't open the file: " + (err.message || err), { title: "Couldn't open file" });
     }
   });
   input.click();
@@ -259,7 +263,7 @@ async function fileSave() {
     updateFileLabel();
   } catch (err) {
     console.error(err);
-    alert("Couldn't save: " + (err.message || err));
+    appAlert("Couldn't save: " + (err.message || err), { title: "Couldn't save" });
   }
 }
 
@@ -281,7 +285,7 @@ async function fileSaveAs() {
     } catch (err) {
       if (!isFsCancelError(err)) {
         console.error(err);
-        alert("Couldn't save: " + (err.message || err));
+        appAlert("Couldn't save: " + (err.message || err), { title: "Couldn't save" });
       }
     }
     return;
@@ -310,7 +314,7 @@ const EXPORT_DPI = 150;
 function fileExport() {
   ensureSheets();
   if (!Array.isArray(state.sheets) || state.sheets.length === 0) {
-    alert("No sheets to export.\n\nSwitch to Plan mode and add a sheet first.");
+    appAlert("No sheets to export.\n\nSwitch to Plan mode and add a sheet first.", { title: "Nothing to export" });
     return;
   }
 
@@ -322,7 +326,7 @@ function fileExport() {
       pages = captureAllSheetsForPrint(EXPORT_DPI);
     } catch (err) {
       console.error(err);
-      alert("Export failed: " + (err && err.message ? err.message : err));
+      appAlert("Export failed: " + (err && err.message ? err.message : err), { title: "Export failed" });
       return;
     }
     if (!pages.length) return;
