@@ -74,9 +74,13 @@ function bindFurnitureBuilder() {
 }
 
 function openFurnitureBuilder(opts) {
-  // opts.editId — when present, load the matching library piece into the
-  // builder for editing. Save will then update the piece in place instead
-  // of appending a new one. Without opts the builder opens empty.
+  // opts.editId      — load the matching library piece by id; save updates
+  //                    in place (custom-piece edit).
+  // opts.forkBuiltIn — { kind, name, width, depth } — fork a built-in palette
+  //                    item into the builder. The procedural drawing for
+  //                    that kind is captured into primitives so the user
+  //                    can tweak; save creates a NEW custom piece.
+  // No opts          — open empty.
   builder.open = true;
   builder.editId = (opts && opts.editId) || null;
   builder.primitives = [];
@@ -93,6 +97,19 @@ function openFurnitureBuilder(opts) {
       // Saved pieces are stored centered on (0,0); the builder's edit
       // workspace also centers there, so no translation needed.
       builder.primitives = (piece.primitives || []).map(normalizePrimitive);
+    }
+  } else if (opts && opts.forkBuiltIn) {
+    const fork = opts.forkBuiltIn;
+    // Pre-fill the name with the original + " (Custom)" so the new piece
+    // is distinguishable from the built-in in the catalog. The user can
+    // rename freely before saving.
+    const baseName = (fork.name || "Custom").replace(/\s*\(Custom\)\s*$/, "");
+    builderNameInput.value = `${baseName} (Custom)`;
+    if (typeof captureBuiltinAsPrimitives === "function" && fork.width > 0 && fork.depth > 0) {
+      const captured = captureBuiltinAsPrimitives(fork.kind, fork.width, fork.depth);
+      if (Array.isArray(captured) && captured.length) {
+        builder.primitives = captured.map(normalizePrimitive);
+      }
     }
   }
 

@@ -311,11 +311,32 @@ async function fileSaveAs() {
 // Multi-page PDFs come for free — page-break-after on each .print-page.
 const EXPORT_DPI = 150;
 
-function fileExport() {
+async function fileExport() {
   ensureSheets();
   if (!Array.isArray(state.sheets) || state.sheets.length === 0) {
-    appAlert("No sheets to export.\n\nSwitch to Plan mode and add a sheet first.", { title: "Nothing to export" });
+    await appAlert("No sheets to export.\n\nSwitch to Plan mode and add a sheet first.", { title: "Nothing to export" });
     return;
+  }
+
+  // Free users get a heads-up about the watermark before each export and
+  // a one-click path to upgrade. Pro users skip straight to capture.
+  if (!state.paid) {
+    const choice = await appChoice(
+      "Free exports carry a diagonal \"DRAFT — easydraftonline.com\" watermark across every page. Upgrade to Pro for clean PDFs.",
+      [
+        { label: "Cancel",        value: "cancel",  cancel: true },
+        { label: "Export anyway", value: "export" },
+        { label: "Buy Pro",       value: "buy",     primary: true },
+      ],
+      { title: "Heads up — exports are watermarked" },
+    );
+    if (choice === "cancel") return;
+    if (choice === "buy") {
+      const url = (typeof CHECKOUT_URL === "string" && CHECKOUT_URL) ? CHECKOUT_URL : "#";
+      window.open(url, "_blank", "noopener");
+      return;
+    }
+    // choice === "export" → fall through to the capture pipeline below.
   }
 
   // Capture is synchronous but heavy on big sheets — give the dropdown a
