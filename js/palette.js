@@ -25,13 +25,15 @@ function paletteIconSvg(item) {
     </svg>`;
   }
   if (item.subtype === "pocket") {
+    // Pocket door plan symbol: wall faces on both sides of the opening,
+    // jamb stubs at the opening edges, the door panel as a thin rectangle
+    // in the opening (closed), and the pocket cavity as a dashed slot
+    // tucked inside the wall on the slide-into side.
     return `<svg viewBox="0 0 48 26" ${stroke}>
-      <path d="M2 22 H 6" stroke-width="2"/>
-      <path d="M42 22 H 46" stroke-width="2"/>
-      <path d="M6 22 V 14" stroke-width="1.5"/>
-      <path d="M42 22 V 14" stroke-width="1.5"/>
-      <path d="M9 18 H 42" stroke-width="2"/>
-      <path d="M13 14 L 9 18 L 13 22" stroke-width="1.2"/>
+      <path d="M2 8 H 14 M 2 18 H 14 M 42 8 H 46 M 42 18 H 46" stroke-width="0.9"/>
+      <path d="M14 8 V 18 M 42 8 V 18" stroke-width="1.5"/>
+      <rect x="14" y="12" width="28" height="2" stroke-width="1"/>
+      <path d="M14 12 H 4 M 14 14 H 4 M 4 12 V 14" stroke-width="0.9" stroke-dasharray="2 1.5"/>
     </svg>`;
   }
   if (item.subtype === "garage") {

@@ -95,7 +95,20 @@ function drawDoorShape(sh, color) {
     ctx.stroke();
 
   } else if (sh.subtype === "pocket") {
+    // Architectural pocket door symbol:
+    //   - Jamb ticks at both ends of the opening
+    //   - Door panel (thin solid rectangle) inside the opening, closed
+    //   - Pocket cavity drawn as a dashed rectangle extending from the
+    //     pocket-side jamb back into the wall for the door's full width,
+    //     showing where the panel retracts when opened
+    // The cavity reads as "hidden inside the wall" thanks to the dashed
+    // outline, distinguishing it from a sliding door (which sits in front
+    // of the wall face) or a regular door (which has a swing arc).
     const tick = 4;
+    const doorThickness = (1.75 / 12) * scale; // 1¾" door
+    const halfThick = doorThickness / 2;
+
+    // Jamb ticks
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(H.x - n.x * tick, H.y - n.y * tick);
@@ -104,25 +117,33 @@ function drawDoorShape(sh, color) {
     ctx.lineTo(E.x + n.x * tick, E.y + n.y * tick);
     ctx.stroke();
 
-    // Door panel — thin line offset perpendicular to wall
-    const panelOff = 0.12 * scale;
-    const ps = { x: H.x + n.x * panelOff, y: H.y + n.y * panelOff };
-    const pe = { x: E.x + n.x * panelOff, y: E.y + n.y * panelOff };
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(ps.x, ps.y);
-    ctx.lineTo(pe.x, pe.y);
-    ctx.stroke();
-
-    // Chevron arrow at H end pointing into the wall (in -u direction)
-    const arrowLen = 6;
-    const aTip = { x: H.x - u.x * arrowLen, y: H.y - u.y * arrowLen };
+    // Door panel rectangle (closed position, in the opening)
+    const c1 = { x: H.x - n.x * halfThick, y: H.y - n.y * halfThick };
+    const c2 = { x: E.x - n.x * halfThick, y: E.y - n.y * halfThick };
+    const c3 = { x: E.x + n.x * halfThick, y: E.y + n.y * halfThick };
+    const c4 = { x: H.x + n.x * halfThick, y: H.y + n.y * halfThick };
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(H.x + n.x * arrowLen * 0.6, H.y + n.y * arrowLen * 0.6);
-    ctx.lineTo(aTip.x, aTip.y);
-    ctx.lineTo(H.x - n.x * arrowLen * 0.6, H.y - n.y * arrowLen * 0.6);
+    ctx.moveTo(c1.x, c1.y);
+    ctx.lineTo(c2.x, c2.y);
+    ctx.lineTo(c3.x, c3.y);
+    ctx.lineTo(c4.x, c4.y);
+    ctx.closePath();
     ctx.stroke();
+
+    // Pocket cavity — three dashed sides (back face, end cap, front face)
+    // sharing the door's H-side edge. Length matches the door so the
+    // cavity is just big enough to swallow the panel.
+    const p1 = { x: c1.x - u.x * w, y: c1.y - u.y * w };
+    const p4 = { x: c4.x - u.x * w, y: c4.y - u.y * w };
+    ctx.lineWidth = 0.9;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(c1.x, c1.y); ctx.lineTo(p1.x, p1.y);
+    ctx.moveTo(p1.x, p1.y); ctx.lineTo(p4.x, p4.y);
+    ctx.moveTo(p4.x, p4.y); ctx.lineTo(c4.x, c4.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
   } else if (sh.subtype === "double") {
     const halfW = w / 2;
