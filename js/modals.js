@@ -71,7 +71,14 @@ function applyDimWidth() {
     return;
   }
   pushHistory();
+  const oldWidth = shape.width;
   shape.width = newWidth;
+  // Slide the abutting wall stub so the cut tracks the resized opening —
+  // otherwise the wall's old cut-edge sits stranded inside (or just
+  // outside) the new door / window footprint.
+  if (shape.type === "door" || shape.type === "window") {
+    refitWallsForResizedOpening(shape, oldWidth);
+  }
   dimWidthInput.value = formatFeet(shape.width);
   render();
 }

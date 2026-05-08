@@ -207,3 +207,70 @@ function cutWallForOpening(layer, wall, opening) {
     });
   }
 }
+
+// After a door / window's width has just changed from `oldWidth`, slide
+// the abutting wall stub so the wall cut keeps tracking the opening's
+// edges. Only the E end (anchor + u * width) shifts under a width change
+// — the H anchor stays put — so we look for any wall segments collinear
+// with the opening axis whose endpoint sits at the OLD E and move that
+// endpoint to the NEW E.
+//
+// Walls that were never cut (no segment with an endpoint at OLD E) are
+// left alone; that's the right behavior when the opening floats free of
+// any wall. Walls that would collapse to zero / negative length after
+// the move are removed so we don't leave stale point-segments behind.
+function refitWallsForResizedOpening(opening, oldWidth) {
+  if (!opening || typeof oldWidth !== "number") return;
+  if (Math.abs(oldWidth - opening.width) < 1e-6) return;
+  const story = activeStory();
+  if (!story) return;
+  const wallsLayer = story.sublayers.find((l) => l.name === WALL_LAYER_NAME);
+  if (!wallsLayer) return;
+
+  const u = { x: Math.cos(opening.angle), y: Math.sin(opening.angle) };
+  const oldEx = opening.x + u.x * oldWidth;
+  const oldEy = opening.y + u.y * oldWidth;
+  const newEx = opening.x + u.x * opening.width;
+  const newEy = opening.y + u.y * opening.width;
+
+  // Tolerance: ¼" — generous enough to absorb floating-point drift from
+  // earlier rotations / moves, tight enough not to grab unrelated walls.
+  const ENDPOINT_TOL = 0.25 / 12;
+  // Parallel test: cross-product of unit vectors. ≤ ~1.1° off-axis.
+  const PARALLEL_TOL = 0.02;
+
+  const toRemove = [];
+  for (const wall of wallsLayer.shapes) {
+    if (wall.type !== "line") continue;
+    const wdx = wall.x2 - wall.x1, wdy = wall.y2 - wall.y1;
+    const wlen = Math.hypot(wdx, wdy);
+    if (wlen < 1e-6) continue;
+    const wux = wdx / wlen, wuy = wdy / wlen;
+    if (Math.abs(wux * u.y - wuy * u.x) > PARALLEL_TOL) continue;
+
+    const d1 = Math.hypot(wall.x1 - oldEx, wall.y1 - oldEy);
+    const d2 = Math.hypot(wall.x2 - oldEx, wall.y2 - oldEy);
+    if (d1 < ENDPOINT_TOL) {
+      // Moving point 1. If NEW E lands past point 2, the opening has
+      // swallowed the wall stub entirely — drop it instead of inverting
+      // the segment's orientation.
+      const fx = wall.x2 - newEx, fy = wall.y2 - newEy;
+      const dot = fx * (wall.x2 - wall.x1) + fy * (wall.y2 - wall.y1);
+      if (dot <= 0) { toRemove.push(wall); continue; }
+      wall.x1 = newEx; wall.y1 = newEy;
+    } else if (d2 < ENDPOINT_TOL) {
+      const fx = newEx - wall.x1, fy = newEy - wall.y1;
+      const dot = fx * (wall.x2 - wall.x1) + fy * (wall.y2 - wall.y1);
+      if (dot <= 0) { toRemove.push(wall); continue; }
+      wall.x2 = newEx; wall.y2 = newEy;
+    } else {
+      continue;
+    }
+    // Drop walls whose stub collapsed to nothing after the move.
+    const newLen = Math.hypot(wall.x2 - wall.x1, wall.y2 - wall.y1);
+    if (newLen < 1e-4) toRemove.push(wall);
+  }
+  if (toRemove.length) {
+    wallsLayer.shapes = wallsLayer.shapes.filter((s) => !toRemove.includes(s));
+  }
+}

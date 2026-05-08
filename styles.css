@@ -294,6 +294,29 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   flex: 1;
 }
 
+.feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  margin-left: auto;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent-strong);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.feedback-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+.feedback-btn:active { transform: translateY(1px); }
+.feedback-btn svg { flex-shrink: 0; }
+
 .control-group {
   display: flex;
   align-items: center;
@@ -2181,7 +2204,23 @@ body.demo-mode #layer-hint-modal {
    .tour-card at the bottom of the viewport and adds .tour-target
    to the element it wants the user to look at next. The card stays
    put across steps; only its copy + the highlighted target change.
+
+   The first step (and any step flagged as "spotlight") gets a
+   centered, scaled-up presentation with a dim backdrop and a
+   glowing pulse — that's the impossible-to-miss landing card the
+   non-tech-savvy audience needs as their first impression.
    ============================================================ */
+
+.tour-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 24, 36, 0.45);
+  z-index: 999;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  pointer-events: auto;
+}
+.tour-backdrop.visible { opacity: 1; }
 
 .tour-card {
   position: fixed;
@@ -2202,6 +2241,51 @@ body.demo-mode #layer-hint-modal {
   font-size: 13px;
   line-height: 1.5;
   user-select: none;
+  transition: transform 260ms ease, bottom 260ms ease, top 260ms ease,
+              padding 220ms ease, box-shadow 220ms ease;
+}
+
+/* Spotlight presentation — used for the welcome step. Centers the card,
+   bumps padding / type size, and runs a glowing pulse around the border
+   so the user immediately knows where to look. */
+.tour-card.tour-card-spotlight {
+  bottom: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 40px));
+  padding: 28px 32px 24px;
+  border-color: var(--accent);
+  box-shadow: 0 24px 60px rgba(13, 24, 36, 0.35),
+              0 0 0 6px rgba(232, 96, 44, 0.15);
+  animation: tour-card-pulse 2.2s ease-in-out infinite;
+}
+.tour-card.tour-card-spotlight .tour-card-title {
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+.tour-card.tour-card-spotlight .tour-card-body {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.tour-card.tour-card-spotlight .tour-card-step {
+  font-size: 11px;
+}
+.tour-card.tour-card-spotlight .tour-card-next {
+  padding: 10px 22px;
+  font-size: 14px;
+}
+
+@keyframes tour-card-pulse {
+  0%, 100% {
+    box-shadow: 0 24px 60px rgba(13, 24, 36, 0.35),
+                0 0 0 6px rgba(232, 96, 44, 0.15),
+                0 0 0 14px rgba(232, 96, 44, 0.0);
+  }
+  50% {
+    box-shadow: 0 24px 60px rgba(13, 24, 36, 0.35),
+                0 0 0 10px rgba(232, 96, 44, 0.30),
+                0 0 0 24px rgba(232, 96, 44, 0.10);
+  }
 }
 
 .tour-card-header {
