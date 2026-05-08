@@ -491,8 +491,32 @@ function nudgeSelected(dx, dy) {
     if (!state.selection.has(sh.id)) return;
     const o = SHAPES[sh.type].capture(sh);
     SHAPES[sh.type].move(sh, o, dx, dy);
+    // Wall stubs follow nudged openings the same way they follow a
+    // pointer drag — the only difference is granularity.
+    if (sh.type === "door" || sh.type === "window") {
+      refitWallsForMovedOpening(sh, o.x, o.y, o.angle);
+    }
   });
   render();
+}
+
+// After a move drag finishes, slide each opening's adjacent wall stubs
+// so the cuts track the new H / E. Collect first, refit second — refit
+// can splice from the walls layer, which is safe only when we're not
+// mid-iteration of any layer.
+function refitWallsForMovedOpeningsInSelection(originalShapes) {
+  if (!originalShapes) return;
+  const moved = [];
+  forEachShape((sh) => {
+    if (sh.type !== "door" && sh.type !== "window") return;
+    if (!state.selection.has(sh.id)) return;
+    const o = originalShapes.get(sh.id);
+    if (!o) return;
+    moved.push({ sh, o });
+  });
+  for (const { sh, o } of moved) {
+    refitWallsForMovedOpening(sh, o.x, o.y, o.angle);
+  }
 }
 
 function applyResize(wp, e) {
@@ -722,6 +746,9 @@ function handleSelectPointerMove(wp, e) {
 
 function finishSelectionAction() {
   if (state.selectionMode === "curve") finishCurveDrag();
+  if (state.selectionMode === "move" && state.selectionData) {
+    refitWallsForMovedOpeningsInSelection(state.selectionData.originalShapes);
+  }
   if (state.selectionMode === "marquee") {
     const m = state.marquee;
     const x1 = Math.min(m.x1, m.x2), x2 = Math.max(m.x1, m.x2);

@@ -208,6 +208,96 @@ function cutWallForOpening(layer, wall, opening) {
   }
 }
 
+// After a door / window has just translated from (oldX, oldY) at oldAngle,
+// slide the abutting wall stubs so the cut tracks the opening's new H / E
+// positions. We only refit when the move was a clean slide ALONG the wall
+// — pure translation, parallel to the opening's axis. If the user rotated
+// the opening or dragged it perpendicular to its wall (i.e. off the wall
+// onto open space or another wall), we leave wall geometry alone so we
+// don't distort the original wall by yanking its endpoints sideways.
+function refitWallsForMovedOpening(opening, oldX, oldY, oldAngle) {
+  if (!opening) return;
+  // Rotation case: refusing to refit is correct — the wall direction stays
+  // fixed but the opening's edge direction has changed, so there's no clean
+  // way to update the cut without distorting the wall's other endpoint.
+  if (Math.abs((opening.angle || 0) - (oldAngle || 0)) > 1e-3) return;
+  const moveDx = opening.x - oldX;
+  const moveDy = opening.y - oldY;
+  if (moveDx * moveDx + moveDy * moveDy < 1e-10) return;
+
+  const story = activeStory();
+  if (!story) return;
+  const wallsLayer = story.sublayers.find((l) => l.name === WALL_LAYER_NAME);
+  if (!wallsLayer) return;
+
+  const u = { x: Math.cos(opening.angle), y: Math.sin(opening.angle) };
+  // The opening must have slid along its own axis (parallel to u). Any
+  // perpendicular component beyond PERP_TOL means the user dragged off
+  // the wall, not along it — leave walls alone in that case.
+  const PERP_TOL = 0.5; // 6"
+  if (Math.abs(moveDx * u.y - moveDy * u.x) > PERP_TOL) return;
+
+  const oldHx = oldX, oldHy = oldY;
+  const oldEx = oldX + u.x * opening.width;
+  const oldEy = oldY + u.y * opening.width;
+  const newHx = opening.x, newHy = opening.y;
+  const newEx = opening.x + u.x * opening.width;
+  const newEy = opening.y + u.y * opening.width;
+
+  const ENDPOINT_TOL = 0.25 / 12;
+  const PARALLEL_TOL = 0.02;
+
+  const toRemove = [];
+  for (const wall of wallsLayer.shapes) {
+    if (wall.type !== "line") continue;
+    const wdx = wall.x2 - wall.x1, wdy = wall.y2 - wall.y1;
+    const wlen = Math.hypot(wdx, wdy);
+    if (wlen < 1e-6) continue;
+    const wux = wdx / wlen, wuy = wdy / wlen;
+    if (Math.abs(wux * u.y - wuy * u.x) > PARALLEL_TOL) continue;
+
+    // Walls that moved with the opening (e.g. the user grabbed the door
+    // and a wall together) won't match OLD H/E because they already
+    // translated. The mismatch is the right outcome — those walls don't
+    // need refitting.
+    let updatedAny = false;
+    let removeWall = false;
+    for (const idx of [1, 2]) {
+      const px = idx === 1 ? wall.x1 : wall.x2;
+      const py = idx === 1 ? wall.y1 : wall.y2;
+      let nx, ny;
+      if (Math.hypot(px - oldHx, py - oldHy) < ENDPOINT_TOL) {
+        nx = newHx; ny = newHy;
+      } else if (Math.hypot(px - oldEx, py - oldEy) < ENDPOINT_TOL) {
+        nx = newEx; ny = newEy;
+      } else {
+        continue;
+      }
+
+      // Orientation guard — same logic as the resize refit. If the new
+      // endpoint would land past the wall's other end (i.e. the opening
+      // slid clean across this stub), the segment would invert. Drop the
+      // stub instead.
+      const ax = idx === 1 ? wall.x2 : wall.x1;
+      const ay = idx === 1 ? wall.y2 : wall.y1;
+      const fwdX = ax - nx, fwdY = ay - ny;
+      const dot = fwdX * (ax - px) + fwdY * (ay - py);
+      if (dot <= 0) { removeWall = true; break; }
+
+      if (idx === 1) { wall.x1 = nx; wall.y1 = ny; }
+      else { wall.x2 = nx; wall.y2 = ny; }
+      updatedAny = true;
+    }
+    if (removeWall) { toRemove.push(wall); continue; }
+    if (updatedAny) {
+      const newLen = Math.hypot(wall.x2 - wall.x1, wall.y2 - wall.y1);
+      if (newLen < 1e-4) toRemove.push(wall);
+    }
+  }
+  if (toRemove.length) {
+    wallsLayer.shapes = wallsLayer.shapes.filter((s) => !toRemove.includes(s));
+  }
+}
 // After a door / window's width has just changed from `oldWidth`, slide
 // the abutting wall stub so the wall cut keeps tracking the opening's
 // edges. Only the E end (anchor + u * width) shifts under a width change
