@@ -1,0 +1,14 @@
+# Supabase project config — only the bits we actually use are pinned.
+# Other fields default to upstream's recommendations.
+
+project_id = "easydraft"
+
+# Edge functions
+# ----------------------------------------------------------------------
+# submit-feedback is reached from the unauthenticated app — beta users
+# don't sign in to leave feedback. Disabling JWT verification lets the
+# function run without forcing the client to mint a session token.
+# (The Supabase gateway still requires the publishable apikey header,
+# which the client sends via SUPABASE_PUBLISHABLE_KEY.)
+[functions.submit-feedback]
+verify_jwt = false

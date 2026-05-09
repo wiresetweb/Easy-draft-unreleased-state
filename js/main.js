@@ -74,19 +74,4 @@ function init() {
   requestAnimationFrame(() => maybeAutoStartTour());
 }
 
-// Beta-tester feedback affordance — placeholder click that shows a modal
-// while the actual feedback pipeline is being built. Replacing this with
-// a real form / API call later only requires editing the click handler.
-function bindFeedbackButton() {
-  const btn = document.getElementById("feedback-btn");
-  if (!btn) return;
-  btn.addEventListener("click", () => {
-    appAlert(
-      "Thanks for trying Easy Draft! We're building the in-app feedback form right now.\n\n" +
-      "In the meantime, email us at feedback@easydraftonline.com — every note from a beta tester gets read.",
-      { title: "Give Feedback" },
-    );
-  });
-}
-
 init();

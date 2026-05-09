@@ -840,7 +840,7 @@ function placeItem(def, sectionKey, worldPos) {
       shape.primitives = def.primitives.map((p) => ({ ...p }));
       shape.customId = def.customId;
     }
-    pushHistory();
+    pushHistory(`Placed ${def.name || "item"}`);
     layer.shapes.push(shape);
     state.selection.clear();
     state.selection.add(shape.id);
@@ -886,7 +886,7 @@ function placeItem(def, sectionKey, worldPos) {
   const { wallsLayer, walls } = findWallsForOpening(shape);
   const shouldCut = walls.length > 0;
 
-  pushHistory();
+  pushHistory(`Placed ${def.name || sectionKey + " item"}`);
   layer.shapes.push(shape);
   state.selection.clear();
   state.selection.add(shape.id);

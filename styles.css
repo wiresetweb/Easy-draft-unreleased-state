@@ -2683,3 +2683,156 @@ body.demo-mode .canvas-wrap {
   #demo-toolbar { top: 8px; left: 8px; }
   #demo-fullcta { bottom: 8px; right: 8px; padding: 8px 12px; font-size: 12px; }
 }
+
+/* ============================================================
+   Feedback modal — Give Feedback button in the topbar opens this.
+   Visual style mirrors the settings modal so the two read as
+   the same family of dialog.
+   ============================================================ */
+
+.feedback-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 42, 54, 0.45);
+  z-index: 1100;
+}
+.feedback-modal.hidden { display: none; }
+
+.feedback-window {
+  width: min(540px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 48px rgba(26, 42, 54, 0.32);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.feedback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.feedback-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.feedback-hint {
+  margin: 0;
+  padding: 14px 18px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.feedback-textarea {
+  margin: 12px 18px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  resize: vertical;
+  min-height: 100px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.feedback-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(232, 96, 44, 0.15);
+}
+
+.feedback-meta {
+  padding: 10px 18px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.feedback-meta-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.link-btn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent-strong);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--accent); }
+
+.feedback-report {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.feedback-report.hidden { display: none; }
+
+.feedback-status {
+  padding: 0 18px;
+  min-height: 18px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.feedback-status.error { color: #c0392b; }
+.feedback-status.success { color: #15803d; }
+
+.feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  margin-top: 12px;
+}
+.feedback-submit-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.feedback-submit-btn:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.feedback-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

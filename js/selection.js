@@ -361,7 +361,7 @@ function updateSelectCursor(sp) {
 // ---------- Selection ops ----------
 function deleteSelected() {
   if (!state.selection.size) return;
-  pushHistory();
+  pushHistory(`Deleted ${state.selection.size} shape${state.selection.size === 1 ? "" : "s"}`);
   for (const story of state.stories) {
     for (const sub of story.sublayers) {
       sub.shapes = sub.shapes.filter((sh) => !state.selection.has(sh.id));
@@ -372,7 +372,7 @@ function deleteSelected() {
 
 function duplicateSelected() {
   if (!state.selection.size) return;
-  pushHistory();
+  pushHistory(`Duplicated ${state.selection.size} shape${state.selection.size === 1 ? "" : "s"}`);
   const offset = Math.max(state.gridSize, 1);
   const newIds = new Set();
   for (const story of state.stories) {
@@ -484,7 +484,7 @@ function nudgeSelected(dx, dy) {
   if (state.selectionMode) return; // mid-drag: let the cursor handle it
   const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
   if (now - (state.lastNudgeTime || 0) > NUDGE_BATCH_MS) {
-    pushHistory();
+    pushHistory("Nudged selection");
   }
   state.lastNudgeTime = now;
   forEachShape((sh) => {
@@ -635,6 +635,10 @@ function applyRotate(wp, e) {
 
 function ensureTransformHistory() {
   if (!state.selectionData || state.selectionData.historyPushed) return;
+  if (typeof logUserAction === "function") {
+    const labels = { move: "Moved selection", resize: "Resized selection", rotate: "Rotated selection", curve: "Curved shape", "page-move": "Moved page" };
+    logUserAction(labels[state.selectionMode] || "Edited selection");
+  }
 
   // Curve drag: rewrite the captured shape back to its pre-drag form
   if (state.selectionMode === "curve") {
@@ -874,7 +878,7 @@ function pasteAt(worldPos) {
   const dx = anchor.x - cx;
   const dy = anchor.y - cy;
 
-  pushHistory();
+  pushHistory(`Pasted ${state.clipboard.length} shape${state.clipboard.length === 1 ? "" : "s"}`);
   state.selection.clear();
   for (const proto of state.clipboard) {
     const copy = cloneShape(proto);

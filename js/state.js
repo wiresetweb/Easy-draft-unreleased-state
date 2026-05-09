@@ -337,7 +337,14 @@ const state = {
   // Persisted in localStorage and serialized into the document so a
   // metric-mode drawing reopens in metric mode regardless of who opens it.
   units: "imperial",
+
+  // Recent-action ring buffer for the Give Feedback diagnostic report.
+  // Entries are { ts: epoch ms, label: string }; pushed by logUserAction
+  // and capped so an idle session doesn't pile up megabytes.
+  actionLog: [],
 };
+
+const ACTION_LOG_MAX = 30;
 
 // ==============================================================================
 // DOM references

@@ -484,6 +484,39 @@
     </div>
   </div>
 
+  <div class="feedback-modal hidden" id="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+    <div class="feedback-window">
+      <div class="feedback-header">
+        <span class="feedback-title" id="feedback-title">Give Feedback</span>
+        <button class="btn-mini" id="feedback-cancel" title="Close (Esc)">Close</button>
+      </div>
+      <p class="feedback-hint">
+        You're a beta tester &mdash; your notes go straight to the team. Tell us what's working,
+        what isn't, what you wish existed. We read every one.
+      </p>
+      <textarea
+        id="feedback-description"
+        class="feedback-textarea"
+        rows="6"
+        placeholder="What happened? What were you trying to do?"
+        autocomplete="off"
+        spellcheck="true"></textarea>
+      <div class="feedback-meta">
+        <p class="feedback-meta-text">
+          We'll also include a small report &mdash; the screen you're on, the tool you had selected,
+          and your last few actions &mdash; so we can reproduce what you saw.
+        </p>
+        <button type="button" class="link-btn" id="feedback-toggle-report">Show what we're sending</button>
+        <pre class="feedback-report hidden" id="feedback-report"></pre>
+      </div>
+      <div class="feedback-status" id="feedback-status" aria-live="polite"></div>
+      <div class="feedback-actions">
+        <button type="button" class="btn-ghost" id="feedback-cancel-2" hidden></button>
+        <button type="button" class="feedback-submit-btn" id="feedback-submit">Send feedback</button>
+      </div>
+    </div>
+  </div>
+
   <div class="ctx-menu hidden" id="ctx-menu" role="menu" aria-label="Context menu">
     <button class="ctx-item" data-ctx-action="cut" role="menuitem">Cut <span class="ctx-shortcut">Ctrl+X</span></button>
     <button class="ctx-item" data-ctx-action="copy" role="menuitem">Copy <span class="ctx-shortcut">Ctrl+C</span></button>
@@ -548,6 +581,7 @@
   <script src="js/plan-view.js"></script>
   <script src="js/file.js"></script>
   <script src="js/cache.js"></script>
+  <script src="js/feedback.js"></script>
   <script src="js/events.js"></script>
   <script src="js/tour.js"></script>
   <script src="js/main.js"></script>
