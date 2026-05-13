@@ -2218,9 +2218,19 @@ body.demo-mode #layer-hint-modal {
   z-index: 999;
   opacity: 0;
   transition: opacity 220ms ease;
+  /* Only the welcome / spotlight step wants the backdrop to actually catch
+     clicks. The element is created at tour start and reused across every
+     step, so leaving it click-eating at all times silently disables the
+     canvas on non-spotlight steps — the user clicks to draw a wall, the
+     invisible backdrop swallows the pointerdown, and they bail with Esc
+     (which marks the tour completed and stops it from auto-firing again).
+     pointer-events flips on with .visible to dodge that whole class of bug. */
+  pointer-events: none;
+}
+.tour-backdrop.visible {
+  opacity: 1;
   pointer-events: auto;
 }
-.tour-backdrop.visible { opacity: 1; }
 
 .tour-card {
   position: fixed;

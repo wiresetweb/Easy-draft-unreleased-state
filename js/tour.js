@@ -11,7 +11,13 @@
 // tour as completed so it stops auto-firing.
 // ==============================================================================
 
-const TOUR_STORAGE_KEY = "easydraft.tour.completed";
+// Key version is bumped whenever the tour grows new steps or fixes a bug that
+// caused testers to "complete" the tour without actually finishing it (e.g.
+// the v1 backdrop swallowed clicks on non-spotlight steps, forcing an Esc
+// out that wrote completed=true). Bumping invalidates stale completions so
+// the next page load shows the corrected tour. Old keys are left in place —
+// localStorage cleanup isn't worth the bytes.
+const TOUR_STORAGE_KEY = "easydraft.tour.completed.v2";
 
 let tourState = null;       // { steps, stepIndex, cardEl, targetEl, rafId }
 const tourSnapshot = {};    // bag for inter-step state checks; reset per tour
@@ -84,6 +90,18 @@ function tourStepList() {
       anchor: () => document.querySelector('.tool[data-tool="line"]'),
       enter: () => { tourSnapshot.wallCount = tourCountShapesOnLayerName("Walls"); },
       advance: () => tourCountShapesOnLayerName("Walls") > (tourSnapshot.wallCount || 0),
+    },
+    {
+      id: "grid-controls",
+      title: "Tune the grid",
+      copy: "Notice how your wall locked onto the grid? That's the 'Snap' toggle up here — leave it on for clean, dimensioned plans, or uncheck it any time you want freeform placement. The 'Opacity' slider beside it makes the grid lines more or less visible without changing the snap behavior — handy when you want to see the drawing without the graph paper behind it.",
+      // Highlight the whole grid control group so both Snap and Opacity sit
+      // inside the glow. Falling back to the snap toggle alone is fine if a
+      // future markup change drops the [title] attribute on the group.
+      anchor: () => document.querySelector('.control-group[title="Grid scale"]')
+        || document.getElementById("snap-toggle"),
+      manual: true,
+      manualLabel: "Got it",
     },
     {
       id: "pick-select",
