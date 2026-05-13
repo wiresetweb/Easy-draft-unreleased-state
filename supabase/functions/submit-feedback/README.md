@@ -59,14 +59,13 @@ once verification lands.
 
 ## Step 2 — Install the Supabase CLI
 
-Pick the one for your machine:
+Native install — pick your platform:
 
 | OS | Command |
 |---|---|
 | macOS (Homebrew) | `brew install supabase/tap/supabase` |
 | Windows (Scoop) | `scoop bucket add supabase https://github.com/supabase/scoop-bucket.git && scoop install supabase` |
-| Cross-platform (npm) | `npm install -g supabase` |
-| Other | Download from <https://github.com/supabase/cli/releases> |
+| Anywhere | Download the binary from <https://github.com/supabase/cli/releases> and drop it on your PATH |
 
 Confirm with:
 
@@ -74,7 +73,36 @@ Confirm with:
 supabase --version
 ```
 
-(should print something like `1.219.0`)
+(should print something like `2.98.2`)
+
+### No native installer handy? Use `npx`
+
+The Supabase CLI's npm package **refuses to install globally** — its
+`preinstall` script hard-errors on `npm install -g supabase`. The
+supported npm route is a per-project dev dependency, run through
+`npx`. From the repo root:
+
+```sh
+npm install supabase --save-dev
+npx supabase --version
+```
+
+If you take this path, every `supabase ...` command in the rest of
+this walkthrough has to be prefixed with `npx`:
+
+```sh
+npx supabase login
+npx supabase link --project-ref dpghsqmdnvwxyaeojbfx
+npx supabase functions deploy submit-feedback
+# …and so on
+```
+
+To skip the prefix, alias it for the session (or append the same line
+to `~/.bashrc` for permanence):
+
+```sh
+alias supabase='npx supabase'
+```
 
 ---
 
