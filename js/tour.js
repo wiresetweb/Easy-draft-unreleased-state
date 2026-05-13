@@ -68,10 +68,14 @@ function tourStepList() {
   return [
     {
       id: "welcome",
-      title: "Welcome to Easy Draft",
-      copy: "Quick two-minute tour. We'll draw a wall, drop a door on it, then jump to the export screen. Hit Skip or press Esc to leave any time.",
+      title: "Welcome to Easy Draft!",
+      copy: "Easy Draft is a simple way to draw floor plans for your home. " +
+            "We'll spend the next two minutes walking through it together — drawing a wall, " +
+            "dropping a door on it, and exporting a finished sheet. " +
+            "You can press Skip or hit the Esc key to leave the tour at any time.",
       manual: true,
-      manualLabel: "Start tour",
+      manualLabel: "Let's go",
+      spotlight: true,
     },
     {
       id: "draw-wall",
@@ -208,10 +212,22 @@ function tourStepList() {
     {
       id: "export",
       title: "Export to PDF",
-      copy: "Your drawing is now inside a real titled sheet with a scale bar and title block. Hit 'Export PDF…' on the left when you're ready — that's the tour. You've drawn a wall, fitted openings, composed a sheet, and exported. Happy drafting!",
+      copy: "Your drawing is now inside a real titled sheet with a scale bar and title block. " +
+            "Scroll down the left sidebar (we just scrolled it for you) and hit 'Export PDF…' to save your sheet. " +
+            "You've drawn a wall, fitted openings, composed a sheet, and exported.",
       anchor: () => document.getElementById("plan-export-btn"),
       manual: true,
-      manualLabel: "Finish",
+      manualLabel: "One last thing",
+    },
+    {
+      id: "feedback",
+      title: "Help us make Easy Draft better",
+      copy: "You're a beta tester — that means your feedback shapes what gets built next. " +
+            "If anything felt confusing, broken, or just plain missing, click 'Give Feedback' " +
+            "in the top-right corner and tell us. Thanks for trying Easy Draft!",
+      anchor: () => document.getElementById("feedback-btn"),
+      manual: true,
+      manualLabel: "Finish tour",
     },
   ];
 }
@@ -221,7 +237,7 @@ function tourStepList() {
 function startTour() {
   if (tourState) endTour(false);
   for (const k of Object.keys(tourSnapshot)) delete tourSnapshot[k];
-  tourState = { steps: tourStepList(), stepIndex: 0, cardEl: null, targetEl: null, rafId: 0 };
+  tourState = { steps: tourStepList(), stepIndex: 0, cardEl: null, backdropEl: null, targetEl: null, rafId: 0 };
   buildTourCard();
   enterStep(0);
   startTourTick();
@@ -232,6 +248,7 @@ function endTour(completed) {
   if (!tourState) return;
   if (tourState.rafId) cancelAnimationFrame(tourState.rafId);
   if (tourState.cardEl && tourState.cardEl.parentNode) tourState.cardEl.parentNode.removeChild(tourState.cardEl);
+  if (tourState.backdropEl && tourState.backdropEl.parentNode) tourState.backdropEl.parentNode.removeChild(tourState.backdropEl);
   if (tourState.targetEl) tourState.targetEl.classList.remove("tour-target");
   tourState = null;
   document.removeEventListener("keydown", onTourKeydown, true);
@@ -301,6 +318,16 @@ function onTourKeydown(e) {
 // ---------- Card + target rendering ----------
 
 function buildTourCard() {
+  // Backdrop sits behind the card on spotlight steps to dim everything else
+  // and keep the user's eye on the card. Hidden by default — paintTourCard
+  // toggles its visibility per step.
+  const backdrop = document.createElement("div");
+  backdrop.className = "tour-backdrop";
+  // Clicking the backdrop should NOT start drawing on the canvas underneath.
+  backdrop.addEventListener("pointerdown", (e) => e.stopPropagation());
+  document.body.appendChild(backdrop);
+  tourState.backdropEl = backdrop;
+
   const card = document.createElement("div");
   card.className = "tour-card";
   card.innerHTML = `
@@ -323,6 +350,7 @@ function buildTourCard() {
 
 function paintTourCard(step) {
   const card = tourState.cardEl;
+  const backdrop = tourState.backdropEl;
   card.querySelector(".tour-card-title").textContent = step.title;
   card.querySelector(".tour-card-body").textContent = step.copy;
   card.querySelector(".tour-card-step").textContent =
@@ -334,6 +362,10 @@ function paintTourCard(step) {
   } else {
     next.style.display = "none";
   }
+  // Spotlight steps get a centered card + dim backdrop + glowing pulse.
+  // Everything else falls back to the bottom-of-screen layout.
+  card.classList.toggle("tour-card-spotlight", !!step.spotlight);
+  if (backdrop) backdrop.classList.toggle("visible", !!step.spotlight);
 }
 
 function paintTourTarget(step) {
@@ -347,6 +379,23 @@ function paintTourTarget(step) {
   if (!el) return;
   el.classList.add("tour-target");
   tourState.targetEl = el;
+  // Make sure the anchor is actually on screen — anchors deep in a
+  // scrollable sidebar (the Export button on the Plan view, in
+  // particular) don't help if the user has to figure out they need to
+  // scroll first. block: "center" keeps the highlight comfortably in
+  // view rather than flush against an edge.
+  scrollTourTargetIntoView(el);
+}
+
+function scrollTourTargetIntoView(el) {
+  if (!el || typeof el.scrollIntoView !== "function") return;
+  try {
+    el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  } catch (_) {
+    // Older browsers without options-object support — fall back to the
+    // legacy boolean form. Still does something useful, just less smooth.
+    try { el.scrollIntoView(false); } catch (_) {}
+  }
 }
 
 function repaintTourTarget() {

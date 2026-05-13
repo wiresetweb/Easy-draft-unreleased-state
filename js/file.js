@@ -186,6 +186,7 @@ async function fileNew() {
   state.sheets = [];
   state.activeSheetId = null;
   if (typeof clearCachedDocument === "function") clearCachedDocument();
+  if (typeof logUserAction === "function") logUserAction("New drawing");
   addStory();
   ensureSheets();
   resetPlanView();
@@ -218,6 +219,7 @@ async function fileOpen() {
         state.fileName = handle.name;
         updateFileLabel();
         if (typeof scheduleCacheSave === "function") scheduleCacheSave();
+        if (typeof logUserAction === "function") logUserAction(`Opened ${handle.name}`);
       }
     } catch (err) {
       // User cancelled the picker — silent. Anything else is a real error.
@@ -243,6 +245,7 @@ async function fileOpen() {
         state.fileName = file.name;
         updateFileLabel();
         if (typeof scheduleCacheSave === "function") scheduleCacheSave();
+        if (typeof logUserAction === "function") logUserAction(`Opened ${file.name}`);
       }
     } catch (err) {
       console.error(err);
@@ -264,6 +267,7 @@ async function fileSave() {
     await writable.close();
     state.fileName = state.fileHandle.name;
     updateFileLabel();
+    if (typeof logUserAction === "function") logUserAction(`Saved ${state.fileName}`);
   } catch (err) {
     console.error(err);
     appAlert("Couldn't save: " + (err.message || err), { title: "Couldn't save" });
@@ -285,6 +289,7 @@ async function fileSaveAs() {
       state.fileHandle = handle;
       state.fileName = handle.name;
       updateFileLabel();
+      if (typeof logUserAction === "function") logUserAction(`Saved as ${state.fileName}`);
     } catch (err) {
       if (!isFsCancelError(err)) {
         console.error(err);
@@ -304,6 +309,7 @@ async function fileSaveAs() {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (typeof logUserAction === "function") logUserAction(`Downloaded ${a.download}`);
 }
 
 // ---------- Export ----------
@@ -342,6 +348,7 @@ async function fileExport() {
     // choice === "export" → fall through to the capture pipeline below.
   }
 
+  if (typeof logUserAction === "function") logUserAction("Exported PDF");
   // Capture is synchronous but heavy on big sheets — give the dropdown a
   // tick to close before we start so the UI feels responsive.
   setTimeout(() => {

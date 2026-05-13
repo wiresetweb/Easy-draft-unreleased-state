@@ -11,3 +11,7 @@ Thumbs.db
 
 # Future-proof
 node_modules/
+
+# Supabase local secrets — never commit API keys
+supabase/.env*
+supabase/.temp/

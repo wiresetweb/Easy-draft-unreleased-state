@@ -33,6 +33,7 @@ function init() {
   bindLayerHintModal();
   bindContextMenu();
   bindFileMenu();
+  bindFeedbackButton();
   bindSettingsModal();
   bindModeSwitch();
   bindSheetList();

@@ -1253,6 +1253,9 @@ function setViewMode(mode) {
   if (mode !== "draw" && mode !== "plan") return;
   if (state.viewMode === mode) return;
   state.viewMode = mode;
+  if (typeof logUserAction === "function") {
+    logUserAction(mode === "plan" ? "Switched to Plan mode" : "Switched to Draw mode");
+  }
 
   document.body.classList.toggle("mode-plan", mode === "plan");
   document.body.classList.toggle("mode-draw", mode === "draw");

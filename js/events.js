@@ -39,6 +39,9 @@ function setTool(tool) {
   if (LAYER_DRAW_TOOLS.has(tool) && isLayerDrawingBlocked()) {
     tool = "select";
   }
+  if (state.tool !== tool && typeof logUserAction === "function") {
+    logUserAction(`Selected ${tool} tool`);
+  }
   state.tool = tool;
   state.pending = null;
   if (tool !== "select") {
@@ -143,7 +146,7 @@ function bindEvents() {
           confirmLabel: "Add",
         });
         if (name && name.trim()) {
-          pushHistory();
+          pushHistory("Added sub-layer");
           addSublayer(story.id, name.trim());
           renderLayerTree();
           renderSheetLayerTree();
@@ -172,7 +175,7 @@ function bindEvents() {
           danger: true,
         });
         if (!ok) return;
-        pushHistory();
+        pushHistory("Deleted story");
         if (deleteStory(story.id)) {
           renderLayerTree();
           renderSheetLayerTree();
@@ -190,7 +193,7 @@ function bindEvents() {
           danger: true,
         });
         if (!ok) return;
-        pushHistory();
+        pushHistory("Deleted sub-layer");
         if (deleteSublayer(story.id, sub.id)) {
           renderLayerTree();
           renderSheetLayerTree();
@@ -219,13 +222,17 @@ function bindEvents() {
         hideLayerHintModal();
       }
       state.activeSublayerId = subRow.dataset.subId;
+      if (typeof logUserAction === "function") {
+        const sub = activeSublayer();
+        if (sub) logUserAction(`Switched to ${sub.name} layer`);
+      }
       renderLayerTree();
       render();
     }
   });
 
   addStoryBtn.addEventListener("click", () => {
-    pushHistory();
+    pushHistory("Added story");
     addStory();
     renderLayerTree();
     renderSheetLayerTree();
@@ -248,7 +255,7 @@ function bindEvents() {
       },
     );
     if (!ok) return;
-    pushHistory();
+    pushHistory("Cleared layer");
     for (const sh of layer.shapes) state.selection.delete(sh.id);
     layer.shapes = [];
     render();
@@ -515,7 +522,7 @@ function onPointerDown(e) {
     const layer = activeSublayer();
     if (!layer) return;
     const wp = snapWorld(screenToWorld(sp.x, sp.y));
-    pushHistory();
+    pushHistory("Placed text");
     const shape = {
       id: makeId("X"),
       type: "text",
@@ -556,7 +563,7 @@ function onPointerDown(e) {
       if (a.x !== b.x || a.y !== b.y) {
         const layer = state.pending.type === "measure" ? getMeasurementsLayer() : activeSublayer();
         if (layer) {
-          pushHistory();
+          pushHistory(`Drew ${state.pending.type === "measure" ? "measurement" : (layer.name === "Walls" ? "wall" : state.pending.type)}`);
           const shape = {
             id: makeId("X"),
             type: state.pending.type,

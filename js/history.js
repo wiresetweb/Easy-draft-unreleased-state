@@ -23,11 +23,12 @@ function snapshot() {
   };
 }
 
-function pushHistory() {
+function pushHistory(label) {
   state.history.push(snapshot());
   if (state.history.length > MAX_HISTORY) state.history.shift();
   state.future.length = 0;
   if (typeof scheduleCacheSave === "function") scheduleCacheSave();
+  if (typeof logUserAction === "function") logUserAction(label || "Edit");
 }
 
 function restore(snap) {
@@ -69,6 +70,7 @@ function undo() {
   restore(state.history.pop());
   render();
   if (typeof scheduleCacheSave === "function") scheduleCacheSave();
+  if (typeof logUserAction === "function") logUserAction("Undo");
 }
 
 function redo() {
@@ -77,4 +79,5 @@ function redo() {
   restore(state.future.pop());
   render();
   if (typeof scheduleCacheSave === "function") scheduleCacheSave();
+  if (typeof logUserAction === "function") logUserAction("Redo");
 }

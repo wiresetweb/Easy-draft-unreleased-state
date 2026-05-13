@@ -35,7 +35,7 @@ function applyDoorFlip(type) {
   if (!id) return;
   const shape = findShapeById(id);
   if (!shape || shape.type !== "door") return;
-  pushHistory();
+  pushHistory(type === "hinge" ? "Flipped door hinge" : "Flipped door swing");
   if (type === "hinge") {
     // Swap which end is the hinge: move anchor to E, reverse direction, flip
     // swing sign so the leaf stays on the same physical side.
@@ -70,8 +70,15 @@ function applyDimWidth() {
     dimWidthInput.value = formatFeet(shape.width);
     return;
   }
-  pushHistory();
+  pushHistory(`Resized ${shape.type} to ${formatFeet(newWidth)}`);
+  const oldWidth = shape.width;
   shape.width = newWidth;
+  // Slide the abutting wall stub so the cut tracks the resized opening —
+  // otherwise the wall's old cut-edge sits stranded inside (or just
+  // outside) the new door / window footprint.
+  if (shape.type === "door" || shape.type === "window") {
+    refitWallsForResizedOpening(shape, oldWidth);
+  }
   dimWidthInput.value = formatFeet(shape.width);
   render();
 }
