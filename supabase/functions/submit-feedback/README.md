@@ -25,11 +25,24 @@ beta-tester feedback won't come anywhere close to that.
 4. Copy the key — it starts with `re_`. **Save it now**; Resend shows
    it exactly once.
 
+> **⚠ Resend sandbox restriction.** Until you verify a sending domain
+> (see below), Resend will only deliver mail from `onboarding@resend.dev`
+> **to the email address you signed up with**. Any other recipient gets a
+> `403 — You can only send testing emails to your own email address`.
+> So either:
+> - sign up at Resend using the same inbox you want feedback delivered
+>   to (the `FEEDBACK_TO` default is `hello@easydraftonline.com`), **or**
+> - while testing, point `FEEDBACK_TO` at your Resend sign-up email via
+>   `supabase secrets set FEEDBACK_TO=you@example.com`, **or**
+> - finish domain verification (next sub-section) so the restriction
+>   lifts.
+
 ### Optional: verify your sending domain
 
 You can use Resend's shared sender (`onboarding@resend.dev`) right away
-and emails will still arrive in your inbox. If you'd rather emails come
-from `feedback@easydraftonline.com`:
+— subject to the sandbox restriction above — but verifying a domain
+lifts that restriction and lets you send to anyone. If you'd rather
+emails come from `feedback@easydraftonline.com`:
 
 1. Resend Dashboard → **Domains** → **Add Domain** → enter
    `easydraftonline.com`.
@@ -148,8 +161,13 @@ curl -i -X POST 'https://dpghsqmdnvwxyaeojbfx.supabase.co/functions/v1/submit-fe
 Success: HTTP `200` and `{"ok":true}` in the body. Within a few seconds
 the email lands in your inbox.
 
-If something goes wrong, **stream the function logs** in another
-terminal so you can see the server-side error:
+On failure, the function passes Resend's own error message back in the
+response body — e.g. an HTTP `502` with
+`{"error":"email send failed","status":403,"resend_error":"validation_error","message":"You can only send testing emails to your own email address (you@example.com)."}`.
+Match the `message` against the table below.
+
+If you'd rather watch it server-side, **stream the function logs** in
+another terminal:
 
 ```sh
 supabase functions logs submit-feedback --tail
@@ -172,7 +190,9 @@ should arrive.
 |---|---|---|
 | Client shows "Server returned 401" | Gateway rejected the request | Confirm `verify_jwt = false` for the function in `supabase/config.toml` (it is in this repo). Redeploy if you edited the config. |
 | Client shows "Server returned 503 — email transport not configured" | `RESEND_API_KEY` secret isn't set | `supabase secrets list`. If missing, re-run `supabase secrets set RESEND_API_KEY=…`. |
-| Client shows "Server returned 502 — email send failed" | Resend rejected the email | Almost always an unverified `FEEDBACK_FROM`. Either unset that secret or finish domain verification. Check `supabase functions logs submit-feedback` for the exact Resend error message. |
+| `curl` returns 502 with `"message":"You can only send testing emails to your own email address"` | Resend's sandbox lets `onboarding@resend.dev` deliver only to the address that owns the Resend account. | Either sign up at Resend with the same inbox you set as `FEEDBACK_TO`, run `supabase secrets set FEEDBACK_TO=your-resend-signup@example.com` while testing, or verify a sending domain and switch `FEEDBACK_FROM` to an address on it. |
+| `curl` returns 502 with a different Resend message (e.g. "The `from` address is not a verified domain") | `FEEDBACK_FROM` points at a domain Resend hasn't verified yet | Unset `FEEDBACK_FROM` (the default falls back to `onboarding@resend.dev`) or finish domain verification in the Resend dashboard. |
+| Client shows "Server returned 502 — email send failed" but no `message` field | Older deploy of the function — it didn't surface Resend's message yet | Redeploy: `supabase functions deploy submit-feedback`. Then re-run the curl and the response body will include the Resend error message. Or read it directly with `supabase functions logs submit-feedback --tail`. |
 | Client shows "Server returned 413" | Description longer than 8000 chars | Trim the note. (The textarea doesn't enforce this — adding a client-side counter is a future polish.) |
 | Email lands in spam | Sender domain isn't verified, or SPF/DKIM still propagating | Verify the domain in Resend, wait a few hours for DNS, mark "Not Spam" once. |
 | `supabase functions deploy` fails with "permission denied" | Wrong account linked, or 2FA token expired | Re-run `supabase login`. |

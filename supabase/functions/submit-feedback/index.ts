@@ -13,9 +13,13 @@
 //      supabase secrets set FEEDBACK_TO=hello@easydraftonline.com (optional)
 //      supabase secrets set FEEDBACK_FROM="Easy Draft <feedback@easydraftonline.com>"  (optional)
 //
-// The FEEDBACK_FROM domain must be verified in your Resend dashboard. While
-// you're getting set up, you can use Resend's "onboarding@resend.dev" sender
-// — it'll deliver to your verified inbox without any DNS work.
+// The FEEDBACK_FROM domain must be verified in your Resend dashboard. Until
+// you finish that, leave FEEDBACK_FROM unset and the function falls back to
+// Resend's shared "onboarding@resend.dev" sender — but note that the shared
+// sender will *only* deliver to the email address that owns the Resend
+// account (Resend returns 403 for any other recipient). So FEEDBACK_TO has
+// to match your Resend sign-up email during the sandbox phase, or you need
+// a verified domain.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
@@ -84,7 +88,21 @@ serve(async (req) => {
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       console.error("Resend API error", res.status, detail);
-      return jsonResponse({ error: "email send failed", status: res.status }, 502);
+      // Surface Resend's own error message in the body so a curl response
+      // (or the in-app fetch) shows the real cause without having to tail
+      // `supabase functions logs`. Resend's error payloads are a small JSON
+      // blob — { statusCode, name, message } — and never include the API
+      // key, so passing the message through is safe.
+      const parsed = parseResendError(detail);
+      return jsonResponse(
+        {
+          error: "email send failed",
+          status: res.status,
+          ...(parsed.name ? { resend_error: parsed.name } : {}),
+          ...(parsed.message ? { message: parsed.message } : {}),
+        },
+        502,
+      );
     }
   } catch (err) {
     console.error("Resend fetch threw", err);
@@ -121,6 +139,25 @@ function buildEmailBody(description: string, report: Record<string, unknown>): {
   `.trim();
   const text = `New beta feedback\n\n${description}\n\n--- Diagnostic report ---\n${reportText}\n`;
   return { html, text };
+}
+
+// Resend errors are JSON like { statusCode, name, message }. Some
+// gateway-side failures come back as plain text instead, so fall back to
+// the raw string when the body isn't parseable.
+function parseResendError(raw: string): { name?: string; message?: string } {
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === "object") {
+      const name = typeof obj.name === "string" ? obj.name : undefined;
+      const message = typeof obj.message === "string" ? obj.message : undefined;
+      if (name || message) return { name, message };
+    }
+  } catch {
+    // Fall through to plain-text handling below.
+  }
+  // Cap the message so a runaway HTML error page doesn't bloat the response.
+  return { message: raw.slice(0, 500) };
 }
 
 function escapeHtml(s: string): string {
