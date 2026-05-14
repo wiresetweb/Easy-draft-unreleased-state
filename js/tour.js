@@ -11,7 +11,13 @@
 // tour as completed so it stops auto-firing.
 // ==============================================================================
 
-const TOUR_STORAGE_KEY = "easydraft.tour.completed";
+// Key version is bumped whenever the tour grows new steps or fixes a bug that
+// caused testers to "complete" the tour without actually finishing it (e.g.
+// the v1 backdrop swallowed clicks on non-spotlight steps, forcing an Esc
+// out that wrote completed=true). Bumping invalidates stale completions so
+// the next page load shows the corrected tour. Old keys are left in place —
+// localStorage cleanup isn't worth the bytes.
+const TOUR_STORAGE_KEY = "easydraft.tour.completed.v2";
 
 let tourState = null;       // { steps, stepIndex, cardEl, targetEl, rafId }
 const tourSnapshot = {};    // bag for inter-step state checks; reset per tour
@@ -62,6 +68,27 @@ function tourAnyShapeChanged(predicate, sigFn, prevMap) {
   return changed;
 }
 
+// Force the active sublayer to the named layer (if it exists) and re-sync the
+// dependent UI — palette panel, tool button enabled-state, layer tree
+// highlight. Used by steps whose copy promises a specific layer is active
+// ("Line tool — already selected for you" only holds on a non-palette layer).
+// No-op if the layer can't be found or is already active.
+function tourEnsureLayerByName(name) {
+  const sub = tourFindSublayerByName(name);
+  if (!sub) return;
+  if (state.activeSublayerId !== sub.id) {
+    state.activeSublayerId = sub.id;
+    state.selection.clear();
+    if (typeof resetCrossLayerMisses === "function") resetCrossLayerMisses();
+    if (typeof hideLayerHintModal === "function") hideLayerHintModal();
+    if (typeof renderLayerTree === "function") renderLayerTree();
+  }
+  // Always refresh palette + tool-button disabled state — even if the layer
+  // didn't change, the user might have landed here from a state where the
+  // sidebar UI was out of sync (e.g. a replayed tour after a cache restore).
+  if (typeof updatePaletteVisibility === "function") updatePaletteVisibility();
+}
+
 // ---------- Step list ----------
 
 function tourStepList() {
@@ -82,8 +109,31 @@ function tourStepList() {
       title: "Draw a wall",
       copy: "Easy Draft draws walls with the Line tool — already selected for you. Click two points on the canvas to drop a wall between them. The cursor snaps to the grid so lengths land clean.",
       anchor: () => document.querySelector('.tool[data-tool="line"]'),
-      enter: () => { tourSnapshot.wallCount = tourCountShapesOnLayerName("Walls"); },
+      enter: () => {
+        // The copy promises the Line tool is selected and ready. Enforce it
+        // here rather than crossing fingers on init defaults — a cached
+        // document, a replayed tour, or a stray click before the tour
+        // started could leave the active layer on a palette layer (which
+        // silently coerces setTool("line") back to "select") or the tool on
+        // something else. Switch to Walls first so the line tool isn't
+        // blocked, then call setTool.
+        tourEnsureLayerByName("Walls");
+        if (typeof setTool === "function") setTool("line");
+        tourSnapshot.wallCount = tourCountShapesOnLayerName("Walls");
+      },
       advance: () => tourCountShapesOnLayerName("Walls") > (tourSnapshot.wallCount || 0),
+    },
+    {
+      id: "grid-controls",
+      title: "Tune the grid",
+      copy: "Notice how your wall locked onto the grid? That's the 'Snap' toggle up here — leave it on for clean, dimensioned plans, or uncheck it any time you want freeform placement. The 'Opacity' slider beside it makes the grid lines more or less visible without changing the snap behavior — handy when you want to see the drawing without the graph paper behind it.",
+      // Highlight the whole grid control group so both Snap and Opacity sit
+      // inside the glow. Falling back to the snap toggle alone is fine if a
+      // future markup change drops the [title] attribute on the group.
+      anchor: () => document.querySelector('.control-group[title="Grid scale"]')
+        || document.getElementById("snap-toggle"),
+      manual: true,
+      manualLabel: "Got it",
     },
     {
       id: "pick-select",
@@ -177,6 +227,10 @@ function tourStepList() {
         return row;
       },
       enter: () => {
+        // "Click your door to select it" only works on the Select tool. The
+        // user might still be holding a drag-drop pending state from the
+        // previous palette steps; force-clear it.
+        if (typeof setTool === "function") setTool("select");
         tourSnapshot.doorStateMap = tourSnapshotShapeMap(
           (sh) => sh.type === "door",
           (sh) => `${sh.x.toFixed(3)}|${sh.y.toFixed(3)}|${sh.angle.toFixed(3)}|${sh.swing}`,
@@ -237,6 +291,14 @@ function tourStepList() {
 function startTour() {
   if (tourState) endTour(false);
   for (const k of Object.keys(tourSnapshot)) delete tourSnapshot[k];
+  // The early steps (Draw a wall, Switch to Select, etc.) all operate on the
+  // Draw-mode canvas. If the user replays the tour from File → Walkthrough
+  // while sitting in Plan mode, those steps deadlock because plan-mode
+  // events.js guards bail before any pointerdown reaches a drawing tool.
+  // Cheap insurance: drop them back into Draw mode at tour start.
+  if (state.viewMode !== "draw" && typeof setViewMode === "function") {
+    setViewMode("draw");
+  }
   tourState = { steps: tourStepList(), stepIndex: 0, cardEl: null, backdropEl: null, targetEl: null, rafId: 0 };
   buildTourCard();
   enterStep(0);
