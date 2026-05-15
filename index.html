@@ -54,6 +54,10 @@
           <input type="range" id="grid-opacity" class="grid-opacity" min="0" max="100" value="50" title="Grid opacity" />
         </div>
 
+        <button class="tour-btn" id="tour-btn" title="New here? Take a quick guided tour of Easy Draft">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polygon points="16 8 14 14 8 16 10 10 16 8"/></svg>
+          <span>Take the Tour</span>
+        </button>
         <button class="feedback-btn" id="feedback-btn" title="Tell us what's working and what isn't &mdash; we read every note">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
           <span>Give Feedback</span>
@@ -164,30 +168,37 @@
           <button class="tool" data-tool="select" title="Select (V)">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 8-6 2-2 6z"/></svg>
             <span>Select</span>
+            <kbd class="tool-key">V</kbd>
           </button>
           <button class="tool active" data-tool="line" title="Line (L)">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="4"/></svg>
             <span>Line</span>
+            <kbd class="tool-key">L</kbd>
           </button>
           <button class="tool" data-tool="box" title="Box (B)">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
             <span>Box</span>
+            <kbd class="tool-key">B</kbd>
           </button>
           <button class="tool" data-tool="stairs" title="Stairs (S)">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 20 3 16 8 16 8 12 13 12 13 8 18 8 18 4 21 4"/></svg>
             <span>Stairs</span>
+            <kbd class="tool-key">S</kbd>
           </button>
           <button class="tool" data-tool="text" title="Text (T)">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="9" y1="20" x2="15" y2="20"/></svg>
             <span>Text</span>
+            <kbd class="tool-key">T</kbd>
           </button>
           <button class="tool" data-tool="measure" title="Measure (M)">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="6" rx="1"/><line x1="7" y1="9" x2="7" y2="12"/><line x1="11" y1="9" x2="11" y2="13"/><line x1="15" y1="9" x2="15" y2="12"/><line x1="19" y1="9" x2="19" y2="13"/></svg>
             <span>Measure</span>
+            <kbd class="tool-key">M</kbd>
           </button>
           <button class="tool" data-tool="pan" title="Pan (H or hold Space)">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V5a2 2 0 1 1 4 0v6"/><path d="M13 11V4a2 2 0 1 1 4 0v9"/><path d="M17 9a2 2 0 1 1 4 0v6a7 7 0 0 1-7 7h-2a7 7 0 0 1-6-3.5L3 14a2 2 0 1 1 3-2l2 2"/><path d="M9 11a2 2 0 1 0-4 0v3"/></svg>
             <span>Pan</span>
+            <kbd class="tool-key">H</kbd>
           </button>
         </div>
       </div>
@@ -195,8 +206,8 @@
       <div class="sidebar-section sidebar-actions draw-only">
         <div class="sidebar-title">Actions</div>
         <div class="action-row">
-          <button class="action-icon action-text" id="undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo">Undo</button>
-          <button class="action-icon action-text" id="redo-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">Redo</button>
+          <button class="action-icon action-text" id="undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo"><span>Undo</span><kbd class="tool-key">&#8963;Z</kbd></button>
+          <button class="action-icon action-text" id="redo-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><span>Redo</span><kbd class="tool-key">&#8963;&#8679;Z</kbd></button>
           <button class="action-icon" id="clear-btn" title="Clear active layer" aria-label="Clear layer">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
           </button>
@@ -241,8 +252,12 @@
 
       <div class="dim-modal hidden" id="dim-modal">
         <div class="dim-row">
-          <label class="dim-label" for="dim-width">Width</label>
-          <input type="text" class="dim-input" id="dim-width" autocomplete="off" spellcheck="false" />
+          <label class="dim-label">Width</label>
+          <div class="dim-stepper">
+            <button type="button" class="dim-step-btn" id="dim-width-dec" aria-label="Make narrower">&minus;</button>
+            <span class="dim-width-readout" id="dim-width-readout" aria-live="polite">&mdash;</span>
+            <button type="button" class="dim-step-btn" id="dim-width-inc" aria-label="Make wider">+</button>
+          </div>
         </div>
         <div class="dim-row dim-flip-row hidden" id="door-flip-row">
           <label class="dim-label">Mirror</label>
@@ -255,7 +270,7 @@
             </button>
           </div>
         </div>
-        <div class="dim-hint" id="dim-hint">Type a size like <code>3'-0"</code> &middot; <kbd>Enter</kbd> to apply</div>
+        <div class="dim-hint" id="dim-hint">Each tap resizes by 2&quot;</div>
       </div>
 
       <div class="line-modal hidden" id="line-modal">

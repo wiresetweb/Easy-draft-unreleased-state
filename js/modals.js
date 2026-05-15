@@ -5,23 +5,18 @@
 // ==============================================================================
 
 // ---------- Dimension modal ----------
+// Per-tap resize increment for the door / window width stepper, in feet.
+// 2" imperial / 50 mm metric — both clean increments that hit common
+// opening sizes without making the user type an architectural string.
+function dimWidthStepFeet() {
+  return state.units === "metric" ? 50 * MM_TO_FT : 2 / 12;
+}
+
 function bindDimModal() {
-  dimWidthInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      applyDimWidth();
-      dimWidthInput.blur();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      const id = dimWidthInput.dataset.shapeId;
-      const shape = id ? findShapeById(id) : null;
-      if (shape) dimWidthInput.value = formatFeet(shape.width);
-      dimWidthInput.blur();
-    }
-    e.stopPropagation();
-  });
-  dimWidthInput.addEventListener("blur", applyDimWidth);
   dimModal.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+  dimWidthDec.addEventListener("click", () => stepDimWidth(-1));
+  dimWidthInc.addEventListener("click", () => stepDimWidth(1));
 
   doorFlipRow.addEventListener("click", (e) => {
     const btn = e.target.closest(".flip-btn");
@@ -31,7 +26,7 @@ function bindDimModal() {
 }
 
 function applyDoorFlip(type) {
-  const id = dimWidthInput.dataset.shapeId;
+  const id = dimModal.dataset.shapeId;
   if (!id) return;
   const shape = findShapeById(id);
   if (!shape || shape.type !== "door") return;
@@ -50,36 +45,27 @@ function applyDoorFlip(type) {
   render();
 }
 
-function applyDimWidth() {
-  const id = dimWidthInput.dataset.shapeId;
+// Resize the selected door / window by one step. `dir` is +1 (wider) or
+// -1 (narrower). Width is quantized onto the step grid so a door that
+// started at an odd size lands on clean increments and repeated taps
+// don't accumulate floating-point drift.
+function stepDimWidth(dir) {
+  const id = dimModal.dataset.shapeId;
   if (!id) return;
   const shape = findShapeById(id);
-  if (!shape) return;
-  let newWidth = parseFeet(dimWidthInput.value);
-  if (newWidth === null || newWidth <= 0) {
-    dimWidthInput.value = formatFeet(shape.width);
-    return;
-  }
-  // When grid snap is on, round width to a grid multiple so both edges of the
-  // opening can land on grid intersections.
-  if (state.snap) {
-    const g = state.gridSize;
-    newWidth = Math.max(g, Math.round(newWidth / g) * g);
-  }
-  if (Math.abs(newWidth - shape.width) < 1e-6) {
-    dimWidthInput.value = formatFeet(shape.width);
-    return;
-  }
+  if (!shape || (shape.type !== "door" && shape.type !== "window")) return;
+  const step = dimWidthStepFeet();
+  let newWidth = (Math.round(shape.width / step) + dir) * step;
+  // Floor at a single step so the opening can't shrink to zero / negative.
+  if (newWidth < step) newWidth = step;
+  if (Math.abs(newWidth - shape.width) < 1e-6) return;
   pushHistory(`Resized ${shape.type} to ${formatFeet(newWidth)}`);
   const oldWidth = shape.width;
   shape.width = newWidth;
   // Slide the abutting wall stub so the cut tracks the resized opening —
   // otherwise the wall's old cut-edge sits stranded inside (or just
   // outside) the new door / window footprint.
-  if (shape.type === "door" || shape.type === "window") {
-    refitWallsForResizedOpening(shape, oldWidth);
-  }
-  dimWidthInput.value = formatFeet(shape.width);
+  refitWallsForResizedOpening(shape, oldWidth);
   render();
 }
 
@@ -111,13 +97,8 @@ function updateDimModal() {
   dimModal.style.left = left + "px";
   dimModal.style.top = top + "px";
 
-  if (document.activeElement !== dimWidthInput) {
-    dimWidthInput.value = formatFeet(shape.width);
-    dimWidthInput.dataset.shapeId = shape.id;
-  } else if (dimWidthInput.dataset.shapeId !== shape.id) {
-    dimWidthInput.value = formatFeet(shape.width);
-    dimWidthInput.dataset.shapeId = shape.id;
-  }
+  dimModal.dataset.shapeId = shape.id;
+  dimWidthReadout.textContent = formatFeet(shape.width);
 
   doorFlipRow.classList.toggle("hidden", shape.type !== "door");
 }

@@ -389,7 +389,9 @@ const layersMin = document.getElementById("layers-min");
 const layersResize = document.getElementById("layers-resize");
 
 const dimModal = document.getElementById("dim-modal");
-const dimWidthInput = document.getElementById("dim-width");
+const dimWidthDec = document.getElementById("dim-width-dec");
+const dimWidthInc = document.getElementById("dim-width-inc");
+const dimWidthReadout = document.getElementById("dim-width-readout");
 const doorFlipRow = document.getElementById("door-flip-row");
 
 const colorPopupEl = document.getElementById("color-popup");

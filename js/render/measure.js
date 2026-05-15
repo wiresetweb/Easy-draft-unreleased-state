@@ -3,10 +3,12 @@
 // drawMeasureShape + dimension drawing primitives + helpers used by
 // the measure tool and the SHAPES.measure registry entry.
 
-// drawArrowhead helper (used by drawDimension)
-function drawArrowhead(tipX, tipY, dirX, dirY) {
-  const len = 9;
-  const halfW = 3;
+// drawArrowhead helper (used by drawDimension). `scale` grows the arrow with
+// the drawing in Plan view; it defaults to 1 (the Draft working view).
+function drawArrowhead(tipX, tipY, dirX, dirY, scale) {
+  const s = scale || 1;
+  const len = 9 * s;
+  const halfW = 3 * s;
   const baseX = tipX + dirX * len;
   const baseY = tipY + dirY * len;
   const px = -dirY, py = dirX;
@@ -21,9 +23,13 @@ function drawArrowhead(tipX, tipY, dirX, dirY) {
 // drawMeasureShape
 function drawMeasureShape(sh, color) {
   const c = color || MEASURE_COLOR;
+  // The stored x1/y1..x2/y2 are the centerline anchors the user placed.
+  // For int / ext dimType the line is drawn between the wall faces those
+  // anchors call out — see measureAdjustedEndpoints.
+  const ep = measureAdjustedEndpoints(sh);
   drawDimension(
-    worldToScreen(sh.x1, sh.y1),
-    worldToScreen(sh.x2, sh.y2),
+    worldToScreen(ep.x1, ep.y1),
+    worldToScreen(ep.x2, ep.y2),
     measureAdjustedLength(sh),
     (sh.offset || 0) * effectiveScale(),
     c,
@@ -52,6 +58,38 @@ function measureAdjustedLength(sh) {
   if (dimType === "int") return Math.max(0, lenFt - total);
   if (dimType === "ext") return lenFt + total;
   return lenFt;
+}
+
+// Visual endpoints of the dimension line. The user places a measurement on
+// wall centerlines, but the dimType says which planes they actually mean:
+//   • "center" → the anchors as placed (no shift)
+//   • "ext"    → each anchor pushed OUT to the wall's exterior face
+//   • "int"    → each anchor pulled IN to the wall's interior face
+// so the drawn line, witness lines and arrows land on the faces the label
+// is calling out instead of stranding on the centerline. Falls back to the
+// raw anchors when an int shift would invert the span (wall thicker than
+// the measurement).
+function measureAdjustedEndpoints(sh) {
+  const dimType = sh.dimType || "center";
+  const lenFt = Math.hypot(sh.x2 - sh.x1, sh.y2 - sh.y1);
+  const raw = { x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2 };
+  if (dimType === "center" || lenFt < 1e-9) return raw;
+
+  const ux = (sh.x2 - sh.x1) / lenFt;
+  const uy = (sh.y2 - sh.y1) / lenFt;
+  const adjA = endpointWallShift(sh.x1, sh.y1, ux, uy);
+  const adjB = endpointWallShift(sh.x2, sh.y2, ux, uy);
+
+  // ext: A retreats along -u, B advances along +u. int: the reverse.
+  const sign = dimType === "ext" ? 1 : -1;
+  if (dimType === "int" && adjA + adjB >= lenFt) return raw;
+
+  return {
+    x1: sh.x1 - ux * adjA * sign,
+    y1: sh.y1 - uy * adjA * sign,
+    x2: sh.x2 + ux * adjB * sign,
+    y2: sh.y2 + uy * adjB * sign,
+  };
 }
 
 // At a measurement anchor, find the thick wall whose face should set the
@@ -107,6 +145,15 @@ function drawDimension(A, B, lenFt, offsetPx, color, alpha, dimType) {
   const ux = dx / len, uy = dy / len;
   const nx = -uy, ny = ux;
 
+  // In Plan view the whole drawing is rendered at the sheet's architectural
+  // scale (state.zoom == planZoom). With a fixed-pixel label and arrowheads
+  // the dimension looks oversized on a small-scale sheet and cramped on a
+  // large one — and a small drawing has its measurement numbers swamping
+  // the image. Scale every decoration with the drawing so a dimension reads
+  // proportionally to what it measures. Draft view keeps the fixed
+  // on-screen size — that's a working view, not a composed sheet.
+  const s = state.viewMode === "plan" ? state.zoom : 1;
+
   const Ap = { x: A.x + nx * offsetPx, y: A.y + ny * offsetPx };
   const Bp = { x: B.x + nx * offsetPx, y: B.y + ny * offsetPx };
 
@@ -120,12 +167,12 @@ function drawDimension(A, B, lenFt, offsetPx, color, alpha, dimType) {
   // small overshoot past the dimension line.
   if (Math.abs(offsetPx) > 0.5) {
     const sgn = offsetPx >= 0 ? 1 : -1;
-    const gap = 2;
-    const overshoot = 4;
+    const gap = 2 * s;
+    const overshoot = 4 * s;
     const startD = sgn * gap;
     const endD = offsetPx + sgn * overshoot;
 
-    ctx.lineWidth = 0.9;
+    ctx.lineWidth = 0.9 * s;
     ctx.beginPath();
     ctx.moveTo(A.x + nx * startD, A.y + ny * startD);
     ctx.lineTo(A.x + nx * endD, A.y + ny * endD);
@@ -136,15 +183,15 @@ function drawDimension(A, B, lenFt, offsetPx, color, alpha, dimType) {
 
   // Dimension line — leave a small gap at each end so the arrowheads aren't
   // butted into the line tip (cleaner look).
-  ctx.lineWidth = 1.25;
+  ctx.lineWidth = 1.25 * s;
   ctx.beginPath();
   ctx.moveTo(Ap.x, Ap.y);
   ctx.lineTo(Bp.x, Bp.y);
   ctx.stroke();
 
   // Arrowheads pointing inward at each end of the dimension line.
-  drawArrowhead(Ap.x, Ap.y, ux, uy);
-  drawArrowhead(Bp.x, Bp.y, -ux, -uy);
+  drawArrowhead(Ap.x, Ap.y, ux, uy, s);
+  drawArrowhead(Bp.x, Bp.y, -ux, -uy, s);
 
   // Upright label rotated parallel to the dimension line.
   const text = formatFeet(lenFt) + measureTypeSuffix(dimType);
@@ -156,17 +203,19 @@ function drawDimension(A, B, lenFt, offsetPx, color, alpha, dimType) {
   ctx.translate(cx, cy);
   ctx.rotate(textAngle);
 
-  ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif";
+  const fontPx = 12 * s;
+  ctx.font = `${fontPx}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif`;
   const m = ctx.measureText(text);
-  const padX = 6;
+  const padX = 6 * s;
   const w = m.width + padX * 2;
-  const h = 18;
+  const h = 18 * s;
+  const radius = 4 * s;
 
   ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
-  fillRoundedRect(-w / 2, -h / 2, w, h, 4);
+  fillRoundedRect(-w / 2, -h / 2, w, h, radius);
   ctx.strokeStyle = withAlpha(color, 0.5);
-  ctx.lineWidth = 1;
-  strokeRoundedRect(-w / 2, -h / 2, w, h, 4);
+  ctx.lineWidth = 1 * s;
+  strokeRoundedRect(-w / 2, -h / 2, w, h, radius);
 
   ctx.fillStyle = color;
   ctx.textAlign = "center";

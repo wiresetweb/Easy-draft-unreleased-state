@@ -12,6 +12,25 @@ function drawShape(sh, color, sub) {
 function drawShapeStrokeUnder(sh, color, lineWidth) {
   const bg = SHAPES[sh.type]?.selectionBg;
   if (bg === "bbox") {
+    // Doors, windows, text and rotated appliances carry a real angle. An
+    // axis-aligned bbox fill draws a halo that bears no relation to an
+    // angled object (a 45° door gets a big upright rectangle). Fill an
+    // ORIENTED box instead — the same orientation source drawSelection()
+    // already uses for the dashed marquee, so glow and marquee agree.
+    const ob = orientedSelectionBoxForGlow(sh);
+    if (ob) {
+      const scale = effectiveScale();
+      const cs = worldToScreen(ob.cx, ob.cy);
+      const halfWPx = ob.halfW * scale + 2;
+      const halfHPx = ob.halfH * scale + 2;
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.translate(cs.x, cs.y);
+      ctx.rotate(ob.angle);
+      ctx.fillRect(-halfWPx, -halfHPx, halfWPx * 2, halfHPx * 2);
+      ctx.restore();
+      return;
+    }
     const b = shapeBBox(sh);
     const tl = worldToScreen(b.x1, b.y1);
     const br = worldToScreen(b.x2, b.y2);
@@ -37,6 +56,20 @@ function drawShapeStrokeUnder(sh, color, lineWidth) {
   }
   ctx.stroke();
   ctx.restore();
+}
+
+// Oriented box { cx, cy, halfW, halfH, angle } for the selection glow of a
+// rotated shape, or null when an axis-aligned fill is fine (angle ~0, or a
+// shape type without a single rotation). orientedBoxFromShape de-rotates the
+// shape, takes its local-frame bbox, and maps the centre back — so the glow
+// hugs the object. Whitelist mirrors selectionOrientedBox()'s.
+function orientedSelectionBoxForGlow(sh) {
+  if (typeof sh.angle !== "number" || Math.abs(sh.angle) < 1e-9) return null;
+  if (sh.type === "door" || sh.type === "window" ||
+      sh.type === "text" || sh.type === "appliance") {
+    return orientedBoxFromShape(sh);
+  }
+  return null;
 }
 
 function drawSelectedShapeGlow() {

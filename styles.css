@@ -294,13 +294,39 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   flex: 1;
 }
 
-.feedback-btn {
+/* Take-the-Tour button — filled accent so a first-time user's eye lands
+   on it. Carries the margin-left:auto that right-aligns the whole
+   tour + feedback button pair (feedback-btn just sits beside it). */
+.tour-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 30px;
   padding: 0 12px;
   margin-left: auto;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.tour-btn:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.tour-btn:active { transform: translateY(1px); }
+.tour-btn svg { flex-shrink: 0; }
+
+.feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  margin-left: 8px;
   border: 1px solid var(--accent);
   background: var(--surface);
   color: var(--accent-strong);
@@ -508,6 +534,29 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
 }
 .tool svg { flex-shrink: 0; }
 .tool span { font-weight: 500; }
+
+/* Keyboard-shortcut badge, pinned to the right edge of each tool row.
+   margin-left:auto pushes it past the label so every key lines up in a
+   column regardless of label length. */
+.tool-key {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 5px;
+  min-width: 18px;
+  text-align: center;
+}
+.tool.active .tool-key {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
 
 .tool.disabled {
   opacity: 0.35;
@@ -1037,7 +1086,11 @@ kbd {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text);
+  gap: 5px;
 }
+/* The Undo/Redo shortcut badge sits beside the label, centred with it —
+   not pushed to the edge the way the full-width tool rows do it. */
+.action-row .tool-key { margin-left: 0; }
 
 /* ---------- Floating panels (Layers + Doors/Windows palette) ---------- */
 .palette-panel {
@@ -1283,6 +1336,49 @@ kbd {
   width: 100px;
 }
 .dim-input:focus { border-color: var(--accent); background: var(--surface); }
+
+/* Door / window width stepper — minus / readout / plus. Replaces the
+   free-text size input so a non-technical user never has to know the
+   3'-0" architectural format. */
+.dim-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+.dim-step-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.dim-step-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.dim-step-btn:active { transform: translateY(0.5px); }
+.dim-width-readout {
+  flex: 1;
+  min-width: 70px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
 
 .dim-flip-row { margin-top: 6px; }
 .dim-flip-row.hidden { display: none; }
