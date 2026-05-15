@@ -310,6 +310,11 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
+  /* Keep the label on one line and never let the flex row squeeze the
+     button below its content — without these the text wraps inside the
+     fixed-height pill and clips into an unreadable stack. */
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
@@ -333,6 +338,8 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
