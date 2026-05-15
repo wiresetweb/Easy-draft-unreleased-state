@@ -599,6 +599,7 @@ body.mode-plan .hint,
 body.mode-plan .dim-modal,
 body.mode-plan .line-modal,
 body.mode-plan .measure-modal,
+body.mode-plan .floor-modal,
 body.mode-plan .island-modal,
 body.mode-plan .text-modal,
 body.mode-plan .stairs-modal,
@@ -1578,6 +1579,23 @@ kbd {
   z-index: 7;
 }
 .measure-modal.hidden { display: none; }
+
+/* ---------- Floor pattern modal ---------- */
+.floor-modal {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
+  z-index: 7;
+}
+.floor-modal.hidden { display: none; }
+.floor-modal .dim-input {
+  width: auto;
+  min-width: 168px;
+}
 
 .measure-type-group {
   display: flex;

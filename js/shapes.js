@@ -343,6 +343,53 @@ function cabinetCloneExtra(c, sh) {
   }
 }
 
+// Floor region — a polygon (sh.points) with a material pattern key. Transform
+// helpers operate on the points array; bbox / hit-test key off it too.
+function bboxFloor(sh) {
+  const pts = sh.points || [];
+  if (!pts.length) return { x1: 0, y1: 0, x2: 0, y2: 0 };
+  return bboxFromXsYs(pts.map((p) => p.x), pts.map((p) => p.y));
+}
+function hitDistanceFloor(sh, wp) {
+  const pts = sh.points || [];
+  if (pts.length < 3) return Infinity;
+  // A click anywhere inside the region selects it.
+  if (pointInPolygon(wp.x, wp.y, pts)) return 0;
+  let d = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    d = Math.min(d, pointToSegmentDist(wp.x, wp.y, a.x, a.y, b.x, b.y));
+  }
+  return d;
+}
+function floorCapture(sh) {
+  return { points: sh.points.map((p) => ({ x: p.x, y: p.y })) };
+}
+function floorRestore(sh, o) {
+  if (o.points) sh.points = o.points.map((p) => ({ x: p.x, y: p.y }));
+}
+function floorMove(sh, o, dx, dy) {
+  for (let i = 0; i < sh.points.length; i++) {
+    sh.points[i].x = o.points[i].x + dx;
+    sh.points[i].y = o.points[i].y + dy;
+  }
+}
+function floorRotate(sh, o, rot) {
+  for (let i = 0; i < sh.points.length; i++) {
+    const p = rot(o.points[i].x, o.points[i].y);
+    sh.points[i].x = p.x;
+    sh.points[i].y = p.y;
+  }
+}
+function floorDuplicate(copy, sh, offset) {
+  copy.points = sh.points.map((p) => ({ x: p.x + offset, y: p.y + offset }));
+}
+function floorCloneExtra(c, sh) {
+  if (Array.isArray(sh.points)) {
+    c.points = sh.points.map((p) => ({ x: p.x, y: p.y }));
+  }
+}
+
 const SHAPES = {
   line: {
     draw: drawLineShape,
@@ -628,6 +675,22 @@ const SHAPES = {
     rotate: cabinetRotate,
     duplicate: cabinetDuplicate,
     cloneExtra: cabinetCloneExtra,
+    selectionBg: "bbox",
+    isOpening: true,
+  },
+  floor: {
+    draw: drawFloorShape,
+    bbox: bboxFloor,
+    hitDistance: hitDistanceFloor,
+    snapCorners: (sh) =>
+      Array.isArray(sh.points) ? sh.points.map((p) => ({ x: p.x, y: p.y })) : [],
+    capture: floorCapture,
+    restore: floorRestore,
+    move: floorMove,
+    rotate: floorRotate,
+    duplicate: floorDuplicate,
+    cloneExtra: floorCloneExtra,
+    // resize omitted — a floor region is redrawn rather than handle-resized.
     selectionBg: "bbox",
     isOpening: true,
   },

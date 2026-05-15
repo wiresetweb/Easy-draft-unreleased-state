@@ -418,6 +418,56 @@ function updateMeasureModal() {
   measureModalEl.dataset.shapeId = shape.id;
 }
 
+// ---------- Floor pattern modal ----------
+function bindFloorModal() {
+  if (!floorModalEl || !floorPatternSelect) return;
+  floorModalEl.addEventListener("pointerdown", (e) => e.stopPropagation());
+  floorPatternSelect.addEventListener("change", () => {
+    const id = floorModalEl.dataset.shapeId;
+    const shape = id ? findShapeById(id) : null;
+    if (!shape || shape.type !== "floor") return;
+    if ((shape.pattern || DEFAULT_FLOOR_PATTERN) === floorPatternSelect.value) return;
+    pushHistory("Changed floor type");
+    shape.pattern = floorPatternSelect.value;
+    render();
+  });
+}
+
+function updateFloorModal() {
+  if (!floorModalEl) return;
+  if (state.tool !== "select" || state.selection.size !== 1 || state.selectionMode) {
+    floorModalEl.classList.add("hidden");
+    return;
+  }
+  let shape = null;
+  for (const id of state.selection) shape = findShapeById(id);
+  if (!shape || shape.type !== "floor") {
+    floorModalEl.classList.add("hidden");
+    return;
+  }
+
+  const bbox = shapeBBox(shape);
+  const tl = worldToScreen(bbox.x1, bbox.y1);
+  const br = worldToScreen(bbox.x2, bbox.y2);
+  const cx = (tl.x + br.x) / 2;
+
+  floorModalEl.classList.remove("hidden");
+  const modalW = floorModalEl.offsetWidth || 240;
+  const modalH = floorModalEl.offsetHeight || 50;
+  const view = viewSize();
+  let left = cx - modalW / 2;
+  let top = Math.min(tl.y, br.y) - modalH - 10;
+  if (top < 8) top = Math.max(tl.y, br.y) + 10;
+  left = Math.max(8, Math.min(left, view.w - modalW - 8));
+  floorModalEl.style.left = left + "px";
+  floorModalEl.style.top = top + "px";
+
+  if (document.activeElement !== floorPatternSelect) {
+    floorPatternSelect.value = shape.pattern || DEFAULT_FLOOR_PATTERN;
+  }
+  floorModalEl.dataset.shapeId = shape.id;
+}
+
 // ---------- Text modal (edit selected text) ----------
 function bindTextModal() {
   textContentInput.addEventListener("keydown", (e) => {

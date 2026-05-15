@@ -49,6 +49,22 @@ function drawApplianceShape(sh, color) {
   ctx.translate(cx, cy);
   ctx.rotate(sh.angle || 0);
 
+  // Opaque backing — a floor pattern beneath the object must not read
+  // through it. Round / oval kinds back with an ellipse; everything else
+  // uses the footprint rectangle.
+  ctx.save();
+  ctx.fillStyle = FLOOR_OCCLUDER_FILL;
+  if (sh.kind === "stool" || sh.kind === "floor-lamp" ||
+      sh.kind === "tub-freestand" || sh.kind === "bidet" ||
+      sh.kind === "lav-pedestal") {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, wPx / 2, dPx / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillRect(-wPx / 2, -dPx / 2, wPx, dPx);
+  }
+  ctx.restore();
+
   // Default rectangular outline — skipped for kinds whose silhouette isn't
   // a rect (a stool's circle, a sectional's L, etc.) so they don't end up
   // boxed in.

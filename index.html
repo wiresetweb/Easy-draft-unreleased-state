@@ -334,6 +334,19 @@
         </div>
       </div>
 
+      <div class="floor-modal hidden" id="floor-modal">
+        <div class="dim-row">
+          <label class="dim-label" for="floor-pattern-select">Floor</label>
+          <select class="dim-input" id="floor-pattern-select">
+            <option value="hardwood">Hardwood</option>
+            <option value="lvp">Luxury Vinyl Plank</option>
+            <option value="tile-square">Square Tile</option>
+            <option value="tile-hex">Hexagonal Tile</option>
+            <option value="carpet">Carpet</option>
+          </select>
+        </div>
+      </div>
+
       <div class="text-modal hidden" id="text-modal">
         <div class="dim-row">
           <label class="dim-label">Text</label>
@@ -574,6 +587,7 @@
   <script src="js/render/appliance.js"></script>
   <script src="js/render/stairs.js"></script>
   <script src="js/render/cabinet.js"></script>
+  <script src="js/render/floor.js"></script>
   <script src="js/shapes.js"></script>
   <script src="js/render.js"></script>
   <script src="js/selection.js"></script>
@@ -581,6 +595,7 @@
   <script src="js/modals.js"></script>
   <script src="js/tools/wall-cuts.js"></script>
   <script src="js/tools/box-merge.js"></script>
+  <script src="js/tools/floor.js"></script>
   <script src="js/tools/stairs.js"></script>
   <script src="js/tools/cabinet.js"></script>
   <script src="js/tools/builtin-edit.js"></script>

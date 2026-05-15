@@ -73,6 +73,15 @@ const DEFAULT_TEXT_SIZE_PX = 14;
 const WALL_LAYER_NAME = "Walls";
 const WALL_CUT_TOL_FT = 0.25;
 
+// Floor regions — the Box / Line tools draw "floor" shapes while this layer
+// is active. DEFAULT_FLOOR_PATTERN is what a freshly drawn region starts as.
+const FLOOR_LAYER_NAME = "Floor";
+const DEFAULT_FLOOR_PATTERN = "hardwood";
+// Paper-white backing painted behind furniture / cabinets / fixtures so a
+// floor pattern beneath them doesn't read through. See render/appliance.js
+// and render/cabinet.js.
+const FLOOR_OCCLUDER_FILL = "#ffffff";
+
 // Standard residential wall thicknesses (feet). Conservative values that match
 // what a contractor would draw on a plan set.
 //   Interior partition: 2×4 stud (3½") + ½" drywall each side = 4½"
@@ -260,6 +269,8 @@ const state = {
 
   tool: "line",
   pending: null,
+  // In-progress polygon-floor build: { points: [{x,y},…] } or null.
+  floorBuilder: null,
   cursorWorld: { x: 0, y: 0 },
   cursorScreen: { x: 0, y: 0 },
 
@@ -401,6 +412,8 @@ const lineStrokeRow = document.getElementById("line-stroke-row");
 const wallThicknessRow = document.getElementById("wall-thickness-row");
 const wallThicknessInput = document.getElementById("wall-thickness-input");
 const measureModalEl = document.getElementById("measure-modal");
+const floorModalEl = document.getElementById("floor-modal");
+const floorPatternSelect = document.getElementById("floor-pattern-select");
 
 const islandModalEl = document.getElementById("island-modal");
 const islandTagPosSelect = document.getElementById("island-tag-pos");

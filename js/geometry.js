@@ -293,6 +293,21 @@ function pointToRectDist(px, py, x1, y1, x2, y2) {
   return Math.hypot(px - cx, py - cy);
 }
 
+// Ray-cast point-in-polygon. `pts` is an array of {x,y}; winding doesn't
+// matter. Used to hit-test the interior of a floor region.
+function pointInPolygon(px, py, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y;
+    const xj = pts[j].x, yj = pts[j].y;
+    if (((yi > py) !== (yj > py)) &&
+        (px < ((xj - xi) * (py - yi)) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 // Door / window axes
 function doorAxes(sh) {
   const u = { x: Math.cos(sh.angle), y: Math.sin(sh.angle) };

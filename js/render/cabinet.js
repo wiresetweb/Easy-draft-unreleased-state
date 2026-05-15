@@ -266,6 +266,9 @@ function drawCabinetPath(points, depth, side, color, alpha, layerIdHint) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.strokeStyle = c;
+  // Opaque backing so a floor pattern beneath the counter doesn't read
+  // through it — filled per visible chunk alongside the outline stroke.
+  ctx.fillStyle = FLOOR_OCCLUDER_FILL;
   ctx.lineWidth = 1.6;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -312,6 +315,7 @@ function drawCabinetPath(points, depth, side, color, alpha, layerIdHint) {
       ctx.lineTo(Bo.x, Bo.y);
       ctx.lineTo(Ao.x, Ao.y);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
     }
   }

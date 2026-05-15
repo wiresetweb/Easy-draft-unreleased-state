@@ -44,6 +44,8 @@ function setTool(tool) {
   }
   state.tool = tool;
   state.pending = null;
+  // Abandon an in-progress polygon-floor build when leaving the Line tool.
+  if (state.floorBuilder && tool !== "line") state.floorBuilder = null;
   if (tool !== "select") {
     state.marquee = null;
     state.selectionMode = null;
@@ -302,6 +304,11 @@ function bindEvents() {
       undoLastCabinetPoint();
       return;
     }
+    if (state.floorBuilder) {
+      floorBuilderUndoPoint();
+      render();
+      return;
+    }
     if (state.pending) { state.pending = null; render(); return; }
     if (state.placing) {
       state.placing = null;
@@ -329,6 +336,22 @@ function bindEvents() {
     // own handlers and are unaffected.
     if (state.viewMode === "plan") return;
     const ctrl = e.ctrlKey || e.metaKey;
+
+    // The polygon-floor builder owns Enter (close the loop) and Escape
+    // (cancel) while it's collecting vertices.
+    if (state.floorBuilder) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (state.floorBuilder.points.length >= 3) { commitFloorPolygon(); render(); }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelFloorBuilder();
+        render();
+        return;
+      }
+    }
 
     if (e.key === " " && !state.spaceDown) {
       state.spaceDown = true;
@@ -551,6 +574,14 @@ function onPointerDown(e) {
     return;
   }
 
+  // Line tool on the Floor layer builds a polygon floor region instead of
+  // individual line segments.
+  if (state.tool === "line" && activeLayerIsFloor()) {
+    floorBuilderClick(snapWorld(screenToWorld(sp.x, sp.y)));
+    render();
+    return;
+  }
+
   if (state.tool === "line" || state.tool === "measure") {
     const rawWorld = screenToWorld(sp.x, sp.y);
     const startWorld = state.tool === "measure" ? snapMeasurePoint(rawWorld) : snapWorld(rawWorld);
@@ -599,7 +630,12 @@ function onPointerDown(e) {
       const b = wp;
       if (a.x !== b.x && a.y !== b.y) {
         const layer = activeSublayer();
-        if (layer) commitBox(layer, a, b);
+        if (layer) {
+          // On the Floor layer the box defines a floor region, not a
+          // four-line box.
+          if (activeLayerIsFloor()) commitFloorRect(layer, a, b);
+          else commitBox(layer, a, b);
+        }
       }
       state.pending = null;
     }
@@ -655,6 +691,7 @@ function onPointerMove(e) {
   }
 
   if (state.pending) render();
+  else if (state.floorBuilder) render();
   else if (state.tool === "measure") render();
   else if (state.snap && (state.tool === "line" || state.tool === "box")) render();
 }
