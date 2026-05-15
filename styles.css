@@ -357,17 +357,18 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
    to give up width gracefully rather than overflow. Three steps:
    tighten spacing → drop the control captions → collapse the
    Tour / Feedback buttons to icon-only. */
-@media (max-width: 1240px) {
+@media (max-width: 1400px) {
   .topbar { gap: 14px; padding: 0 12px; }
-  .topbar-controls { gap: 8px; }
+  .topbar-controls { gap: 9px; }
   .control-group { gap: 6px; padding: 0 8px; }
-}
-@media (max-width: 1080px) {
-  /* "ZOOM" / "GRID" / "Opacity" captions — the controls read without them. */
+  /* "ZOOM" / "GRID" / "Opacity" captions — the controls read without them,
+     and dropping them keeps the groups at full size (no squeeze) well
+     before the topbar would run out of room. */
   .control-label,
   .control-sublabel { display: none; }
 }
-@media (max-width: 900px) {
+@media (max-width: 1160px) {
+  /* Collapse the Tour / Feedback buttons to icon-only squares. */
   .tour-btn span,
   .feedback-btn span { display: none; }
   .tour-btn,
@@ -388,6 +389,9 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
+  /* A control group is a fixed-content box — never let the topbar flex
+     squeeze it, which would wrap / clip the controls inside. */
+  flex-shrink: 0;
 }
 
 .control-label {
@@ -402,6 +406,7 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
 .control-suffix {
   font-size: 11px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .readout {
