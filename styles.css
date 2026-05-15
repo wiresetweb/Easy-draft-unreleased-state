@@ -1086,7 +1086,11 @@ kbd {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text);
+  gap: 5px;
 }
+/* The Undo/Redo shortcut badge sits beside the label, centred with it —
+   not pushed to the edge the way the full-width tool rows do it. */
+.action-row .tool-key { margin-left: 0; }
 
 /* ---------- Floating panels (Layers + Doors/Windows palette) ---------- */
 .palette-panel {
