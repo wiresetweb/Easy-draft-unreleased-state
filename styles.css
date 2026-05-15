@@ -1284,6 +1284,49 @@ kbd {
 }
 .dim-input:focus { border-color: var(--accent); background: var(--surface); }
 
+/* Door / window width stepper — minus / readout / plus. Replaces the
+   free-text size input so a non-technical user never has to know the
+   3'-0" architectural format. */
+.dim-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+.dim-step-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.dim-step-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.dim-step-btn:active { transform: translateY(0.5px); }
+.dim-width-readout {
+  flex: 1;
+  min-width: 70px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
 .dim-flip-row { margin-top: 6px; }
 .dim-flip-row.hidden { display: none; }
 

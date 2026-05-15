@@ -54,8 +54,8 @@ function applyUnitsToUI() {
 function applyUnitsToDimHint() {
   const el = document.getElementById("dim-hint");
   if (!el) return;
-  const example = state.units === "metric" ? "915 mm" : "3'-0\"";
-  el.innerHTML = `Type a size like <code>${example}</code> &middot; <kbd>Enter</kbd> to apply`;
+  const step = state.units === "metric" ? "50 mm" : "2\"";
+  el.textContent = `Each tap resizes by ${step}`;
 }
 
 function applyUnitsToGridInput() {

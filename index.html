@@ -241,8 +241,12 @@
 
       <div class="dim-modal hidden" id="dim-modal">
         <div class="dim-row">
-          <label class="dim-label" for="dim-width">Width</label>
-          <input type="text" class="dim-input" id="dim-width" autocomplete="off" spellcheck="false" />
+          <label class="dim-label">Width</label>
+          <div class="dim-stepper">
+            <button type="button" class="dim-step-btn" id="dim-width-dec" aria-label="Make narrower">&minus;</button>
+            <span class="dim-width-readout" id="dim-width-readout" aria-live="polite">&mdash;</span>
+            <button type="button" class="dim-step-btn" id="dim-width-inc" aria-label="Make wider">+</button>
+          </div>
         </div>
         <div class="dim-row dim-flip-row hidden" id="door-flip-row">
           <label class="dim-label">Mirror</label>
@@ -255,7 +259,7 @@
             </button>
           </div>
         </div>
-        <div class="dim-hint" id="dim-hint">Type a size like <code>3'-0"</code> &middot; <kbd>Enter</kbd> to apply</div>
+        <div class="dim-hint" id="dim-hint">Each tap resizes by 2&quot;</div>
       </div>
 
       <div class="line-modal hidden" id="line-modal">
