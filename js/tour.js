@@ -176,6 +176,62 @@ function tourStepList() {
       ),
     },
     {
+      id: "pick-measure",
+      title: "Measure your work",
+      copy: "Easy Draft can dimension your plan too. Click the Measure tool on the left toolbar (or press M).",
+      anchor: () => document.querySelector('.tool[data-tool="measure"]'),
+      advance: () => state.tool === "measure",
+    },
+    {
+      id: "draw-measurement",
+      title: "Take a measurement",
+      copy: "Click two points to dimension the distance between them — try measuring along the wall you just drew. The cursor snaps to corners and the grid, and every measurement lands on its own 'Measurements' layer.",
+      anchor: null,
+      enter: () => { tourSnapshot.measureCount = tourCountShapesByType("measure"); },
+      advance: () => tourCountShapesByType("measure") > (tourSnapshot.measureCount || 0),
+    },
+    {
+      id: "measure-type",
+      title: "Choose what it measures",
+      copy: "Click your measurement to select it. The popup switches how it reads — center-to-center, interior face, or exterior face. Try the Interior or Exterior button and watch the dimension update.",
+      anchor: () => {
+        const el = document.getElementById("measure-modal");
+        if (!el || el.classList.contains("hidden")) return null;
+        return el;
+      },
+      enter: () => {
+        // The measurement lives on the Measurements layer. Make that the
+        // active layer and switch to the Select tool so a click on the
+        // measurement edits it instead of starting a fresh measure.
+        if (typeof setTool === "function") setTool("select");
+        tourEnsureLayerByName("Measurements");
+      },
+      advance: () => {
+        if (state.selection.size !== 1) return false;
+        const id = [...state.selection][0];
+        const sh = findShapeById(id);
+        return !!(sh && sh.type === "measure" && (sh.dimType || "center") !== "center");
+      },
+    },
+    {
+      id: "hide-measurements-layer",
+      title: "Hide a layer to clear the view",
+      copy: "Dimensions can crowd the canvas while you draw. In the layer panel on the right, click the eye icon on the 'Measurements' row to hide it — click the eye again any time to bring it back.",
+      anchor: () => {
+        const sub = tourFindSublayerByName("Measurements");
+        if (!sub) return null;
+        const row = document.querySelector(`.sub-row[data-sub-id="${sub.id}"]`);
+        if (!row) return null;
+        // Anchor the eye button specifically — a row-wide glow would invite
+        // a click on the name (which just switches the active layer).
+        return row.querySelector('[data-action="vis-sub"]') || row;
+      },
+      advance: () => {
+        const sub = tourFindSublayerByName("Measurements");
+        return !!(sub && sub.visible === false);
+      },
+    },
+    {
       id: "switch-layer",
       title: "Switch layers",
       copy: "Layers do two things: they organize your drawing AND they swap your toolset. Click the words 'Windows & Doors' in the layer panel on the right (don't tap the eye or color dot — those just toggle visibility / color).",
