@@ -102,7 +102,6 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: calc(var(--sidebar-w) - 18px);
 }
 
 .brand-mark {
@@ -115,16 +114,7 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   object-fit: contain;
 }
 
-.brand-title {
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Plan badge — pill next to the brand title that reads "Free" until the
+/* Plan badge — pill next to the logo that reads "Free" until the
    visitor's session resolves to an active "base" entitlement, at which
    point it flips to "Pro". js/auth.js drives the class swap. */
 .plan-badge {
@@ -148,20 +138,9 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
   color: #ffffff;
   border-color: var(--accent-strong);
 }
-.brand-sub-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: -1px;
-}
-.brand-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-/* "Buy Pro →" link sits next to the brand subtitle for free users. Pulled
-   out of the brand subtitle so it can be hidden cleanly via [hidden]
-   when the visitor's entitlement check resolves to active. */
+/* "Buy Pro →" link sits beside the plan badge for free users. Hidden
+   cleanly via [hidden] when the visitor's entitlement check resolves
+   to active. */
 .buy-pro-link {
   font-size: 11px;
   font-weight: 700;
