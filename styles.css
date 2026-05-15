@@ -535,6 +535,29 @@ input, select { font-family: inherit; font-size: inherit; color: inherit; }
 .tool svg { flex-shrink: 0; }
 .tool span { font-weight: 500; }
 
+/* Keyboard-shortcut badge, pinned to the right edge of each tool row.
+   margin-left:auto pushes it past the label so every key lines up in a
+   column regardless of label length. */
+.tool-key {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 5px;
+  min-width: 18px;
+  text-align: center;
+}
+.tool.active .tool-key {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+
 .tool.disabled {
   opacity: 0.35;
   cursor: not-allowed;
