@@ -38,12 +38,12 @@ function updatePlanBadge() {
   const buyLink = document.getElementById("buy-pro-link");
   if (el) {
     if (state.paid) {
-      el.textContent = "Pro";
+      el.textContent = "Pro Version";
       el.classList.remove("plan-badge-free");
       el.classList.add("plan-badge-pro");
       el.title = "Pro version — exports are clean";
     } else {
-      el.textContent = "Free";
+      el.textContent = "Free Version";
       el.classList.remove("plan-badge-pro");
       el.classList.add("plan-badge-free");
       el.title = "Free version — exports are watermarked";
