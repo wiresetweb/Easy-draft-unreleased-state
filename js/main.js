@@ -34,6 +34,7 @@ function init() {
   bindContextMenu();
   bindFileMenu();
   bindFeedbackButton();
+  bindTourButton();
   bindSettingsModal();
   bindModeSwitch();
   bindSheetList();

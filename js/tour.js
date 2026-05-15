@@ -480,3 +480,14 @@ function maybeAutoStartTour() {
   if (done === "true") return;
   startTour();
 }
+
+// Topbar "Take the Tour" button. The auto-start only fires once per browser
+// (localStorage gate) and a returning visitor who skipped it has no obvious
+// way back in — File → Walkthrough is buried. This always-visible button is
+// the discoverable entry point; it relaunches the tour from step one
+// regardless of the completed flag.
+function bindTourButton() {
+  const btn = document.getElementById("tour-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => startTour());
+}
