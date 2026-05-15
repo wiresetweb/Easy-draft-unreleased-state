@@ -11,17 +11,9 @@
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <img class="brand-mark" src="images/logo_transparent_background_small.png" alt="Drafting Studio logo" />
-        <div class="brand-text">
-          <div class="brand-title">
-            <span>Drafting Studio</span>
-            <span class="plan-badge plan-badge-free" id="plan-badge" title="Free version &mdash; exports are watermarked">Free</span>
-          </div>
-          <div class="brand-sub-row">
-            <span class="brand-sub" id="brand-sub">Residential drawings</span>
-            <a class="buy-pro-link" id="buy-pro-link" href="#" target="_blank" rel="noopener" hidden>Buy Pro &rarr;</a>
-          </div>
-        </div>
+        <img class="brand-mark" src="images/logo_transparent_background_small.png" alt="Easy Draft logo" />
+        <span class="plan-badge plan-badge-free" id="plan-badge" title="Free version &mdash; exports are watermarked">Free</span>
+        <a class="buy-pro-link" id="buy-pro-link" href="#" target="_blank" rel="noopener" hidden>Buy Pro &rarr;</a>
       </div>
 
       <div class="topbar-menus">
@@ -342,6 +334,19 @@
         </div>
       </div>
 
+      <div class="floor-modal hidden" id="floor-modal">
+        <div class="dim-row">
+          <label class="dim-label" for="floor-pattern-select">Floor</label>
+          <select class="dim-input" id="floor-pattern-select">
+            <option value="hardwood">Hardwood</option>
+            <option value="lvp">Luxury Vinyl Plank</option>
+            <option value="tile-square">Square Tile</option>
+            <option value="tile-hex">Hexagonal Tile</option>
+            <option value="carpet">Carpet</option>
+          </select>
+        </div>
+      </div>
+
       <div class="text-modal hidden" id="text-modal">
         <div class="dim-row">
           <label class="dim-label">Text</label>
@@ -582,6 +587,7 @@
   <script src="js/render/appliance.js"></script>
   <script src="js/render/stairs.js"></script>
   <script src="js/render/cabinet.js"></script>
+  <script src="js/render/floor.js"></script>
   <script src="js/shapes.js"></script>
   <script src="js/render.js"></script>
   <script src="js/selection.js"></script>
@@ -589,6 +595,7 @@
   <script src="js/modals.js"></script>
   <script src="js/tools/wall-cuts.js"></script>
   <script src="js/tools/box-merge.js"></script>
+  <script src="js/tools/floor.js"></script>
   <script src="js/tools/stairs.js"></script>
   <script src="js/tools/cabinet.js"></script>
   <script src="js/tools/builtin-edit.js"></script>

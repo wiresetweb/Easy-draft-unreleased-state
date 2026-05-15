@@ -24,6 +24,7 @@ function init() {
   bindDimModal();
   bindLineModal();
   bindMeasureModal();
+  bindFloorModal();
   bindIslandModal();
   bindTextModal();
   bindStairsModal();

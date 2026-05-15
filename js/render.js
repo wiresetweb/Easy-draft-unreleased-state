@@ -478,9 +478,11 @@ function render() {
   drawCabinetPreview();
   drawSnapHint();
   drawPending();
+  drawFloorBuilderPreview();
   updateDimModal();
   updateLineModal();
   updateTextModal();
   updateMeasureModal();
+  updateFloorModal();
   updateIslandModal();
 }
