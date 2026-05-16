@@ -184,27 +184,26 @@ const PALETTE_ITEMS = {
   // Organized by room. Pieces that read naturally in more than one room
   // (TVs, floor lamps, bookshelves) are duplicated into each section so the
   // user finds them wherever they expect to look.
+  // Sofa / Loveseat / Armchair / Sectional come from the Custom Furniture
+  // Library and replace the procedural built-ins. Media Console, TVs and
+  // Floor Lamp have no custom counterpart, so they stay procedural.
   livingRoom: [
-    { name: 'Armchair 32"',         kind: "armchair",       width: 2 + 8 / 12, depth: 2 + 8 / 12 },
-    { name: 'Loveseat 5\'-3"',      kind: "loveseat",       width: 5.25,       depth: 3 + 2 / 12 },
-    { name: 'Sofa 7\'-0"',          kind: "sofa",           width: 7,          depth: 3 + 2 / 12 },
-    { name: 'Sectional 9\' × 6\'',  kind: "sectional",      width: 9,          depth: 6 },
     { name: 'Media Console 60"',    kind: "media-console",  width: 5,          depth: 1.5 },
     { name: 'TV 55" (stand)',       kind: "tv-stand",       width: 4,          depth: 0.5 },
     { name: 'TV 55" (wall)',        kind: "tv-wall",        width: 4,          depth: 0.25 },
     { name: 'Floor Lamp',           kind: "floor-lamp",     width: 1.25,       depth: 1.25 },
   ],
+  // Dresser comes from the Custom Furniture Library (Single / Double Dresser).
+  // Wardrobe, TVs and Floor Lamp stay procedural — no custom counterpart.
   bedroom: [
     { name: 'Wardrobe 4\'-0"',      kind: "wardrobe",       width: 4,          depth: 2 },
-    { name: 'Dresser 60"',          kind: "dresser",        width: 5,          depth: 1.5 },
     { name: 'TV 55" (stand)',       kind: "tv-stand",       width: 4,          depth: 0.5 },
     { name: 'TV 55" (wall)',        kind: "tv-wall",        width: 4,          depth: 0.25 },
     { name: 'Floor Lamp',           kind: "floor-lamp",     width: 1.25,       depth: 1.25 },
   ],
-  diningRoom: [
-    { name: 'Dining Chair 18"',     kind: "dining-chair",   width: 1.5,        depth: 1 + 7 / 12 },
-    { name: 'Stool 15"',            kind: "stool",          width: 1.25,       depth: 1.25 },
-  ],
+  // Dining Chair, Stool and Dining Tables all come from the Custom Furniture
+  // Library — this section starts empty and is filled by the sync.
+  diningRoom: [],
   // Office and laundry start empty — populated by syncCustomFurnitureToPalette
   // from the Custom Furniture Library. Kept as named sections so the palette
   // headers always render even before the library loads.
