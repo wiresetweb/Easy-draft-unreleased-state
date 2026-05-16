@@ -414,6 +414,13 @@ function customFurnitureIconSvg(item) {
       const rx = (p.rx || p.r || 0) * scale;
       const ry = (p.ry || p.r || 0) * scale;
       body += `<ellipse cx="${p.cx*scale+cx}" cy="${p.cy*scale+cy}" rx="${rx}" ry="${ry}" stroke-width="1.1"/>`;
+    } else if (p.type === "text") {
+      // Match the on-canvas custom rendering: text is filled (not stroked),
+      // sized in feet, and centered on its anchor point.
+      const fontPx = Math.max(1.5, (p.sizeFt || 1 / 3) * scale);
+      const anchor = p.align === "left" ? "start" : p.align === "right" ? "end" : "middle";
+      const txt = String(p.text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      body += `<text x="${p.x*scale+cx}" y="${p.y*scale+cy}" font-size="${fontPx}" text-anchor="${anchor}" dominant-baseline="central" fill="currentColor" stroke="none">${txt}</text>`;
     }
   }
   return `<svg viewBox="0 0 48 26" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -550,9 +557,12 @@ function renderPalette() {
       itemEl.dataset.index = String(i);
       const icon = document.createElement("div");
       icon.className = "palette-item-icon";
+      // Spread the whole item so custom pieces carry their primitives /
+      // width / depth through to customFurnitureIconSvg — without them the
+      // thumbnail falls back to the dashed placeholder box.
       icon.innerHTML = paletteIconSvg({
+        ...item,
         subtype: sectionKey === "windows" ? null : item.subtype,
-        kind: item.kind,
       });
       itemEl.appendChild(icon);
       const name = document.createElement("span");
