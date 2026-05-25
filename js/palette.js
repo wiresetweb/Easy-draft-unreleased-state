@@ -378,13 +378,6 @@ function isAppliancePaletteSection(key) {
   return APPLIANCE_PALETTE_SECTIONS.has(key);
 }
 
-// All sections whose contents come from the Furniture layer. Used to
-// decide where the "Export library" footer button appears, which custom
-// pieces show edit pencils, etc.
-const FURNITURE_PALETTE_SECTIONS = new Set([
-  "livingRoom", "bedroom", "diningRoom", "office", "laundry",
-]);
-
 // Render a custom piece's primitives into a 48×26 SVG that fits the palette
 // thumbnail. The primitives are stored centered at (0, 0) in feet — we just
 // scale to fit the inner box and translate to the SVG center.
@@ -600,26 +593,6 @@ function renderPalette() {
 
     section.appendChild(content);
 
-    // Export-library button anchored to the last Furniture-layer section
-    // so it shows up exactly once at the bottom of the panel, regardless
-    // of which sections happen to be expanded.
-    const isLastFurnitureSection =
-      FURNITURE_PALETTE_SECTIONS.has(sectionKey) &&
-      spec.sections.indexOf(sectionKey) === spec.sections.length - 1;
-    if (isLastFurnitureSection) {
-      const footer = document.createElement("div");
-      footer.className = "palette-section-footer";
-      const lib = Array.isArray(window.CUSTOM_FURNITURE_LIBRARY) ? window.CUSTOM_FURNITURE_LIBRARY : [];
-      const count = lib.length;
-      footer.innerHTML = `
-        <button class="palette-tool-btn palette-export-btn" data-palette-action="export-custom-furniture" ${count === 0 ? "disabled" : ""}>
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span>Export library${count ? ` (${count})` : ""}</span>
-        </button>
-      `;
-      section.appendChild(footer);
-    }
-
     paletteBody.appendChild(section);
   }
 }
@@ -756,11 +729,6 @@ function bindPalettePanel() {
       }
       return;
     }
-    const action = e.target.closest("[data-palette-action]");
-    if (action && action.dataset.paletteAction === "export-custom-furniture") {
-      downloadCustomFurnitureFile(window.CUSTOM_FURNITURE_LIBRARY || []);
-      return;
-    }
     const toolBtn = e.target.closest(".palette-tool-btn");
     if (toolBtn) {
       const id = toolBtn.dataset.paletteTool;
@@ -778,9 +746,8 @@ function bindPalettePanel() {
   });
 
   paletteBody.addEventListener("pointerdown", (e) => {
-    // Edit pencil and Export footer should not start a drag-to-place.
+    // Edit pencil should not start a drag-to-place.
     if (e.target.closest(".palette-item-edit")) return;
-    if (e.target.closest("[data-palette-action]")) return;
     const item = e.target.closest(".palette-item");
     if (!item) return;
     const sectionKey = item.dataset.section;

@@ -454,7 +454,7 @@ function bindFileMenu() {
       showSettingsModal();
     }
     else if (action === "walkthrough") {
-      startTour();
+      promptTourChoice();
     }
   });
 

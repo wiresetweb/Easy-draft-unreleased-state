@@ -50,8 +50,9 @@ function drawApplianceShape(sh, color) {
   ctx.rotate(sh.angle || 0);
 
   // Opaque backing — a floor pattern beneath the object must not read
-  // through it. Round / oval kinds back with an ellipse; everything else
-  // uses the footprint rectangle.
+  // through it. Round / oval kinds back with an ellipse, custom pieces trace
+  // their own primitives so rounded silhouettes don't get boxed in, and
+  // everything else uses the footprint rectangle.
   ctx.save();
   ctx.fillStyle = FLOOR_OCCLUDER_FILL;
   if (sh.kind === "stool" || sh.kind === "floor-lamp" ||
@@ -60,6 +61,8 @@ function drawApplianceShape(sh, color) {
     ctx.beginPath();
     ctx.ellipse(0, 0, wPx / 2, dPx / 2, 0, 0, Math.PI * 2);
     ctx.fill();
+  } else if (sh.kind === "custom") {
+    fillCustomFurnitureBacking(sh, scale);
   } else {
     ctx.fillRect(-wPx / 2, -dPx / 2, wPx, dPx);
   }
@@ -320,6 +323,55 @@ function drawSectionalInterior(c, wPx, dPx) {
   ctx.moveTo(chaiseLeft, sofaFrontY);
   ctx.lineTo( wPx / 2,    sofaFrontY);
   ctx.stroke();
+}
+
+// Opaque white backing for builder-made furniture. Rather than boxing the
+// piece in its bounding rectangle (which leaves a hard rectangle behind
+// rounded silhouettes), trace each area primitive — rounded rects and
+// ellipses get filled, line primitives get a slightly fattened white stroke —
+// so the backing hugs the actual outline. Mirrors the geometry in
+// drawCustomFurnitureInterior so fill and stroke line up exactly.
+function fillCustomFurnitureBacking(sh, scale) {
+  const prims = Array.isArray(sh.primitives) ? sh.primitives : [];
+  ctx.save();
+  ctx.fillStyle = FLOOR_OCCLUDER_FILL;
+  ctx.strokeStyle = FLOOR_OCCLUDER_FILL;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const p of prims) {
+    if (p.type === "rect") {
+      const x = p.x * scale, y = p.y * scale;
+      const w = p.w * scale, h = p.h * scale;
+      const r = Math.max(0, Math.min(w / 2, h / 2, (p.r || 0) * scale));
+      ctx.beginPath();
+      if (r > 0) {
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y,     x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x,     y + h, r);
+        ctx.arcTo(x,     y + h, x,     y,     r);
+        ctx.arcTo(x,     y,     x + w, y,     r);
+        ctx.closePath();
+      } else {
+        ctx.rect(x, y, w, h);
+      }
+      ctx.fill();
+    } else if (p.type === "circle") {
+      const rx = (p.rx || p.r || 0) * scale;
+      const ry = (p.ry || p.r || 0) * scale;
+      ctx.beginPath();
+      ctx.ellipse(p.cx * scale, p.cy * scale, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.type === "line") {
+      // A touch wider than the interior stroke (1.4px) so the colored line
+      // lands on a clean white margin instead of straight on the floor.
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(p.x1 * scale, p.y1 * scale);
+      ctx.lineTo(p.x2 * scale, p.y2 * scale);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 // Custom (builder-made) furniture. Coordinates on each primitive are in feet,

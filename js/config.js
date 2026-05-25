@@ -14,7 +14,7 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_DZAup0w4vG7gsRddZpmQQQ_eXNR8zzu
 
 // Where the Buy Pro button + the upgrade prompts on free-user exports
 // link to. Open in a new tab so the user doesn't lose their drawing.
-const CHECKOUT_URL = "https://easydraftonline.lemonsqueezy.com/checkout";
+const CHECKOUT_URL = "https://easydraftonline.lemonsqueezy.com/checkout/buy/605b4285-01f5-46f1-8b03-6646a23f08c4";
 
 // Supabase edge function endpoint for the Give Feedback button. Function
 // source lives in supabase/functions/submit-feedback/. Leave blank to
