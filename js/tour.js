@@ -417,25 +417,20 @@ function cabinTourStepList() {
     {
       id: "cabin-thicken",
       title: "Make them real walls",
-      copy: "Walls have framing, not just a centerline. In the popup, click 'Ext. wood' to turn this " +
-            "into an exterior framed wall — watch it thicken on the canvas. (If the popup's gone, " +
-            "click the wall again first.)",
+      copy: "Walls have framing, not just a centerline. Click a wall, then click 'Ext. wood' in the popup to " +
+            "turn it into an exterior framed wall — watch it thicken. Do this for all four walls (tip: drag a " +
+            "box around all of them, or shift-click, to set them at once). We'll wait until every wall is framed.",
       anchor: () => {
         const row = document.getElementById("wall-thickness-row");
         if (!row || row.classList.contains("hidden")) return null;
         return row.querySelector('.wall-thickness-btn[data-preset="ext-wood"]') || row;
       },
-      enter: () => {
-        tourSnapshot.thicknessMap = tourSnapshotShapeMap(
-          (sh) => sh.type === "line",
-          (sh) => String(sh.thickness || 0),
-        );
+      advance: () => {
+        const walls = tourFindSublayerByName("Walls");
+        if (!walls) return false;
+        const lines = walls.shapes.filter((sh) => sh.type === "line");
+        return lines.length >= 4 && lines.every((sh) => (sh.thickness || 0) > 0);
       },
-      advance: () => tourAnyShapeChanged(
-        (sh) => sh.type === "line",
-        (sh) => String(sh.thickness || 0),
-        tourSnapshot.thicknessMap,
-      ),
     },
     {
       id: "cabin-switch-layer",
@@ -476,18 +471,38 @@ function cabinTourStepList() {
       advance: () => tourCountShapesByType("window") > (tourSnapshot.windowCount || 0),
     },
     {
-      id: "cabin-furnish",
-      title: "Furnish it",
-      copy: "Click 'Furniture' in the layer panel to open the furniture catalog, then drop a bed, table, " +
-            "or any piece inside your cabin. Drag it around to position it however you like.",
-      anchor: () => document.getElementById("palette-panel"),
-      enter: () => {
-        // Move onto the Furniture layer so the palette shows furniture and new
-        // pieces land where we're counting.
-        tourEnsureLayerByName("Furniture");
-        if (typeof setTool === "function") setTool("select");
-        tourSnapshot.furnitureCount = tourCountShapesOnLayerName("Furniture");
+      id: "cabin-open-layers",
+      title: "Open the layer panel",
+      copy: "The layer panel tucked itself away to make room for the door catalog. Click its collapse/expand " +
+            "button (the little dash on the right edge of the layers bar) to bring the panel back.",
+      anchor: () => layersMin || document.getElementById("layers-min"),
+      advance: () => !!(layersPanel && !layersPanel.classList.contains("minimized")),
+    },
+    {
+      id: "cabin-furniture-layer",
+      title: "Open the Furniture catalog",
+      copy: "Now click the word 'Furniture' in the layer panel (not the eye or color dot). The right panel " +
+            "switches to a furniture catalog.",
+      anchor: () => {
+        const sub = tourFindSublayerByName("Furniture");
+        if (!sub) return null;
+        const row = document.querySelector(`.sub-row[data-sub-id="${sub.id}"]`);
+        if (!row) return null;
+        return row.querySelector(".sub-name") || row;
       },
+      enter: () => { if (typeof setTool === "function") setTool("select"); },
+      advance: () => {
+        const sub = activeSublayer();
+        return !!(sub && sub.name === "Furniture");
+      },
+    },
+    {
+      id: "cabin-furnish",
+      title: "Drop in a piece",
+      copy: "Drag a bed, table, sofa, or any piece from the catalog into your cabin. Once it's placed, drag it " +
+            "around to position it however you like.",
+      anchor: () => document.getElementById("palette-panel"),
+      enter: () => { tourSnapshot.furnitureCount = tourCountShapesOnLayerName("Furniture"); },
       advance: () => tourCountShapesOnLayerName("Furniture") > (tourSnapshot.furnitureCount || 0),
     },
     {
@@ -501,11 +516,33 @@ function cabinTourStepList() {
       id: "cabin-measure",
       title: "Measure a wall",
       copy: "Click two points to dimension the distance between them — try measuring the full width of your " +
-            "cabin. The cursor snaps to corners and the grid, and the dimension lands on its own " +
+            "cabin, clicking near one corner and then the other. The dimension lands on its own " +
             "'Measurements' layer.",
       anchor: null,
       enter: () => { tourSnapshot.measureCount = tourCountShapesByType("measure"); },
       advance: () => tourCountShapesByType("measure") > (tourSnapshot.measureCount || 0),
+    },
+    {
+      id: "cabin-measure-ext",
+      title: "Measure exterior to exterior",
+      copy: "By default a dimension reads center-to-center. Click your new measurement to select it, then click " +
+            "'ext. to ext.' in the popup — now it reads from the outside face of one wall to the outside face of " +
+            "the other, the way a builder dimensions a plan.",
+      anchor: () => {
+        const el = document.getElementById("measure-modal");
+        if (!el || el.classList.contains("hidden")) return null;
+        return el;
+      },
+      enter: () => {
+        if (typeof setTool === "function") setTool("select");
+        tourEnsureLayerByName("Measurements");
+      },
+      advance: () => {
+        if (state.selection.size !== 1) return false;
+        const id = [...state.selection][0];
+        const sh = findShapeById(id);
+        return !!(sh && sh.type === "measure" && (sh.dimType || "center") === "ext");
+      },
     },
     {
       id: "cabin-show-page",
@@ -521,6 +558,29 @@ function cabinTourStepList() {
         );
       },
       advance: () => Array.isArray(state.sheets) && state.sheets.some((s) => s.pageOutlineVisible),
+    },
+    {
+      id: "cabin-center-page",
+      title: "Center your cabin on the page",
+      copy: "That dashed rectangle is your printable page — and you can move it. Drag the rectangle so your " +
+            "cabin sits in the middle of it. Whatever falls inside the rectangle is what prints.",
+      anchor: null,
+      enter: () => {
+        const sheet = Array.isArray(state.sheets)
+          ? state.sheets.find((s) => (s.sheetType || "drawing") === "drawing")
+          : null;
+        tourSnapshot.pageOriginSig = sheet && sheet.pageOrigin
+          ? `${sheet.pageOrigin.x.toFixed(3)}|${sheet.pageOrigin.y.toFixed(3)}`
+          : "none";
+      },
+      advance: () => {
+        const sheet = Array.isArray(state.sheets)
+          ? state.sheets.find((s) => (s.sheetType || "drawing") === "drawing")
+          : null;
+        if (!sheet || !sheet.pageOrigin) return false;
+        const sig = `${sheet.pageOrigin.x.toFixed(3)}|${sheet.pageOrigin.y.toFixed(3)}`;
+        return sig !== tourSnapshot.pageOriginSig;
+      },
     },
     {
       id: "cabin-plan-mode",
