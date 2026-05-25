@@ -1315,20 +1315,6 @@ kbd {
   color: var(--accent-strong);
 }
 
-/* Section footer used for the Furniture "Export library" button. Sits
-   below the palette items, full-width, so the click target reads as a
-   distinct row rather than another palette tool. */
-.palette-section-footer {
-  padding: 6px 4px 8px;
-  border-top: 1px dashed var(--border);
-  margin-top: 4px;
-}
-.palette-section-footer .palette-tool-btn { width: 100%; }
-.palette-export-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .palette-resize {
   position: absolute;
   bottom: 0;
@@ -2408,6 +2394,22 @@ body.demo-mode #layer-hint-modal {
   user-select: none;
   transition: transform 260ms ease, bottom 260ms ease, top 260ms ease,
               padding 220ms ease, box-shadow 220ms ease;
+}
+
+/* While the walkthrough is running, any editing popup that opens (line/wall
+   thickness, dimensions, text, measurements, etc.) must sit above the tour
+   card (z-index 1000) and backdrop (999) so it isn't hidden behind them. The
+   bump is scoped to .tour-running so normal popup stacking is left untouched. */
+body.tour-running .dim-modal,
+body.tour-running .line-modal,
+body.tour-running .measure-modal,
+body.tour-running .island-modal,
+body.tour-running .text-modal,
+body.tour-running .stairs-modal,
+body.tour-running .cabinet-modal,
+body.tour-running .color-popup,
+body.tour-running .layer-hint-modal {
+  z-index: 1001;
 }
 
 /* Spotlight presentation — used for the welcome step. Centers the card,

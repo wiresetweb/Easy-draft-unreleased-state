@@ -342,9 +342,219 @@ function tourStepList() {
   ];
 }
 
+// ---------- Sample-cabin step list ----------
+//
+// The in-depth alternative to the quick walkthrough. Instead of a whirlwind
+// feature tour, this hand-holds the user through drawing their first complete
+// plan: a four-wall cabin with a door, a window, a piece of furniture, a
+// dimension, and a finished export. Reuses the same step engine + helpers as
+// the quick tour — only the copy and the sequencing differ.
+function cabinTourStepList() {
+  // A wall step is the same shape four times over: re-assert the Walls layer +
+  // Line tool, snapshot the current wall count, and advance once it ticks up.
+  const wallStep = (id, title, copy, anchor) => ({
+    id,
+    title,
+    copy,
+    anchor: anchor || null,
+    enter: () => {
+      tourEnsureLayerByName("Walls");
+      if (typeof setTool === "function") setTool("line");
+      tourSnapshot.cabinWallCount = tourCountShapesOnLayerName("Walls");
+    },
+    advance: () => tourCountShapesOnLayerName("Walls") > (tourSnapshot.cabinWallCount || 0),
+  });
+
+  return [
+    {
+      id: "welcome",
+      title: "Let's build a cabin",
+      copy: "We'll draw a small cabin together, start to finish — four walls, a door, a window, " +
+            "a stick of furniture, a dimension, and a printable sheet at the end. " +
+            "Take it at your own pace; press Skip or Esc to leave any time.",
+      manual: true,
+      manualLabel: "Start building",
+      spotlight: true,
+    },
+    wallStep(
+      "cabin-wall-1",
+      "Draw the first wall",
+      "Easy Draft draws walls with the Line tool — selected for you. Click once to start, " +
+        "move across, and click again to drop the bottom wall of your cabin. The cursor snaps " +
+        "to the grid so the length lands clean.",
+      () => document.querySelector('.tool[data-tool="line"]'),
+    ),
+    wallStep(
+      "cabin-wall-2",
+      "Now the right wall",
+      "From the end of that first wall, click upward to draw the right side. Connect it to the " +
+        "corner you just finished so the cabin starts to take shape.",
+    ),
+    wallStep(
+      "cabin-wall-3",
+      "Add the back wall",
+      "Run a wall across the top, parallel to your first one. Three sides down — one to go.",
+    ),
+    wallStep(
+      "cabin-wall-4",
+      "Close the cabin",
+      "Drop the last wall down the left side to close the rectangle. That's your cabin's footprint.",
+    ),
+    {
+      id: "cabin-select-wall",
+      title: "Click a wall to edit it",
+      copy: "Switch gears: click directly on any wall you drew. A little popup appears right beside " +
+            "it — that's the editor. In Easy Draft, almost everything works this way: click to edit.",
+      anchor: null,
+      enter: () => { if (typeof setTool === "function") setTool("select"); },
+      advance: () => {
+        if (state.selection.size !== 1) return false;
+        const id = [...state.selection][0];
+        const sh = findShapeById(id);
+        return !!(sh && sh.type === "line");
+      },
+    },
+    {
+      id: "cabin-thicken",
+      title: "Make them real walls",
+      copy: "Walls have framing, not just a centerline. In the popup, click 'Ext. wood' to turn this " +
+            "into an exterior framed wall — watch it thicken on the canvas. (If the popup's gone, " +
+            "click the wall again first.)",
+      anchor: () => {
+        const row = document.getElementById("wall-thickness-row");
+        if (!row || row.classList.contains("hidden")) return null;
+        return row.querySelector('.wall-thickness-btn[data-preset="ext-wood"]') || row;
+      },
+      enter: () => {
+        tourSnapshot.thicknessMap = tourSnapshotShapeMap(
+          (sh) => sh.type === "line",
+          (sh) => String(sh.thickness || 0),
+        );
+      },
+      advance: () => tourAnyShapeChanged(
+        (sh) => sh.type === "line",
+        (sh) => String(sh.thickness || 0),
+        tourSnapshot.thicknessMap,
+      ),
+    },
+    {
+      id: "cabin-switch-layer",
+      title: "Switch to Windows & Doors",
+      copy: "Layers organize your drawing AND swap your toolset. Click the words 'Windows & Doors' in " +
+            "the layer panel on the right (not the eye or color dot — those just toggle visibility / color).",
+      anchor: () => {
+        const sub = tourFindSublayerByName("Windows & Doors");
+        if (!sub) return null;
+        const row = document.querySelector(`.sub-row[data-sub-id="${sub.id}"]`);
+        if (!row) return null;
+        return row.querySelector(".sub-name") || row;
+      },
+      advance: () => {
+        const sub = activeSublayer();
+        return !!(sub && sub.name === "Windows & Doors");
+      },
+    },
+    {
+      id: "cabin-door",
+      title: "Hang a door",
+      copy: "The right panel is now a door catalog. Drag any door onto one of your walls — Easy Draft " +
+            "snaps it to the centerline and cuts the wall at the opening for you.",
+      anchor: () => document.getElementById("palette-panel"),
+      enter: () => {
+        tourSnapshot.doorCount = tourCountShapesByType("door");
+        updatePaletteVisibility();
+      },
+      advance: () => tourCountShapesByType("door") > (tourSnapshot.doorCount || 0),
+    },
+    {
+      id: "cabin-window",
+      title: "Add a window",
+      copy: "Same gesture: drag a window from the catalog onto another wall. Easy Draft handles the wall " +
+            "cut for windows just like it did for the door.",
+      anchor: () => document.getElementById("palette-panel"),
+      enter: () => { tourSnapshot.windowCount = tourCountShapesByType("window"); },
+      advance: () => tourCountShapesByType("window") > (tourSnapshot.windowCount || 0),
+    },
+    {
+      id: "cabin-furnish",
+      title: "Furnish it",
+      copy: "Click 'Furniture' in the layer panel to open the furniture catalog, then drop a bed, table, " +
+            "or any piece inside your cabin. Drag it around to position it however you like.",
+      anchor: () => document.getElementById("palette-panel"),
+      enter: () => {
+        // Move onto the Furniture layer so the palette shows furniture and new
+        // pieces land where we're counting.
+        tourEnsureLayerByName("Furniture");
+        if (typeof setTool === "function") setTool("select");
+        tourSnapshot.furnitureCount = tourCountShapesOnLayerName("Furniture");
+      },
+      advance: () => tourCountShapesOnLayerName("Furniture") > (tourSnapshot.furnitureCount || 0),
+    },
+    {
+      id: "cabin-pick-measure",
+      title: "Grab the Measure tool",
+      copy: "Time to dimension your cabin. Click the Measure tool on the left toolbar (or press M).",
+      anchor: () => document.querySelector('.tool[data-tool="measure"]'),
+      advance: () => state.tool === "measure",
+    },
+    {
+      id: "cabin-measure",
+      title: "Measure a wall",
+      copy: "Click two points to dimension the distance between them — try measuring the full width of your " +
+            "cabin. The cursor snaps to corners and the grid, and the dimension lands on its own " +
+            "'Measurements' layer.",
+      anchor: null,
+      enter: () => { tourSnapshot.measureCount = tourCountShapesByType("measure"); },
+      advance: () => tourCountShapesByType("measure") > (tourSnapshot.measureCount || 0),
+    },
+    {
+      id: "cabin-show-page",
+      title: "Show the page outline",
+      copy: "Easy Draft already has a printable sheet ready. In the 'Pages' list at the top-left, click the " +
+            "eye on the sheet's row to overlay the page outline — drag the dashed rectangle to frame your cabin.",
+      anchor: () => {
+        if (!Array.isArray(state.sheets)) return null;
+        const sheet = state.sheets.find((s) => (s.sheetType || "drawing") === "drawing");
+        if (!sheet) return null;
+        return document.querySelector(
+          `.sheet-row[data-sheet-id="${sheet.id}"] [data-sheet-action="toggle-visibility"]`
+        );
+      },
+      advance: () => Array.isArray(state.sheets) && state.sheets.some((s) => s.pageOutlineVisible),
+    },
+    {
+      id: "cabin-plan-mode",
+      title: "Switch to Plan mode",
+      copy: "Two modes: Draw is where you build; Plan is where you compose it onto a titled sheet. Same " +
+            "drawing, different lens. Click 'Plan' in the top bar.",
+      anchor: () => document.querySelector('.mode-btn[data-mode="plan"]'),
+      advance: () => state.viewMode === "plan",
+    },
+    {
+      id: "cabin-export",
+      title: "Export your cabin",
+      copy: "Your cabin is now inside a real titled sheet with a scale bar and title block. Scroll down the " +
+            "left sidebar (we just scrolled it for you) and hit 'Export PDF…' to save it. " +
+            "You drew walls, fitted openings, furnished a room, dimensioned it, and exported — a complete plan.",
+      anchor: () => document.getElementById("plan-export-btn"),
+      manual: true,
+      manualLabel: "One last thing",
+    },
+    {
+      id: "cabin-feedback",
+      title: "Help us make Easy Draft better",
+      copy: "You're a beta tester — your feedback shapes what gets built next. If anything felt confusing, " +
+            "broken, or missing, click 'Give Feedback' in the top-right and tell us. Thanks for building with us!",
+      anchor: () => document.getElementById("feedback-btn"),
+      manual: true,
+      manualLabel: "Finish tour",
+    },
+  ];
+}
+
 // ---------- Lifecycle ----------
 
-function startTour() {
+function startTour(variant) {
   if (tourState) endTour(false);
   for (const k of Object.keys(tourSnapshot)) delete tourSnapshot[k];
   // The early steps (Draw a wall, Switch to Select, etc.) all operate on the
@@ -355,7 +565,11 @@ function startTour() {
   if (state.viewMode !== "draw" && typeof setViewMode === "function") {
     setViewMode("draw");
   }
-  tourState = { steps: tourStepList(), stepIndex: 0, cardEl: null, backdropEl: null, targetEl: null, rafId: 0 };
+  const steps = variant === "cabin" ? cabinTourStepList() : tourStepList();
+  tourState = { steps, variant: variant || "quick", stepIndex: 0, cardEl: null, backdropEl: null, targetEl: null, rafId: 0 };
+  // Flags the tour as active so editing popups (line/wall thickness, dimensions,
+  // etc.) can stack above the walkthrough card instead of behind it.
+  document.body.classList.add("tour-running");
   buildTourCard();
   enterStep(0);
   startTourTick();
@@ -369,6 +583,7 @@ function endTour(completed) {
   if (tourState.backdropEl && tourState.backdropEl.parentNode) tourState.backdropEl.parentNode.removeChild(tourState.backdropEl);
   if (tourState.targetEl) tourState.targetEl.classList.remove("tour-target");
   tourState = null;
+  document.body.classList.remove("tour-running");
   document.removeEventListener("keydown", onTourKeydown, true);
   if (completed) {
     try { localStorage.setItem(TOUR_STORAGE_KEY, "true"); } catch (_) { /* private mode, etc */ }
@@ -530,6 +745,25 @@ function repaintTourTarget() {
 
 // ---------- Entry points ----------
 
+// Ask which experience the user wants before launching. Falls back to the
+// quick walkthrough if the dialog helper isn't available for any reason.
+function promptTourChoice() {
+  if (typeof appChoice !== "function") { startTour("quick"); return; }
+  appChoice(
+    "Quick walkthrough is a two-minute tour of the essentials. Build a sample cabin takes a bit " +
+      "longer and guides you through drawing your first complete plan — four walls, a door, a window, " +
+      "furniture, and a finished export.",
+    [
+      { label: "Quick walkthrough", value: "quick", primary: true },
+      { label: "Build a sample cabin", value: "cabin" },
+      { label: "Cancel", value: null, cancel: true },
+    ],
+    { title: "Take the Tour" },
+  ).then((choice) => {
+    if (choice === "quick" || choice === "cabin") startTour(choice);
+  });
+}
+
 function maybeAutoStartTour() {
   let done = "false";
   try { done = localStorage.getItem(TOUR_STORAGE_KEY) || "false"; } catch (_) { /* no-op */ }
@@ -545,5 +779,5 @@ function maybeAutoStartTour() {
 function bindTourButton() {
   const btn = document.getElementById("tour-btn");
   if (!btn) return;
-  btn.addEventListener("click", () => startTour());
+  btn.addEventListener("click", () => promptTourChoice());
 }
