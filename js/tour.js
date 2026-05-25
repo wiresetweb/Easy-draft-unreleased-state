@@ -971,9 +971,45 @@ function promptTourChoice() {
       { label: "Cancel", value: null, cancel: true },
     ],
     { title: "Take the Tour" },
-  ).then((choice) => {
-    if (choice === "quick" || choice === "cabin") startTour(choice);
+  ).then(async (choice) => {
+    if (choice !== "quick" && choice !== "cabin") return;
+    // Hand the user a clean canvas to work in — offering to save first so any
+    // in-progress drawing isn't lost.
+    if (!(await tourPrepareFreshCanvas())) return;
+    startTour(choice);
   });
+}
+
+// Does the current drawing have anything in it worth saving?
+function tourDocumentHasContent() {
+  let has = false;
+  if (typeof forEachShape === "function") forEachShape(() => { has = true; });
+  return has;
+}
+
+// Before a tour starts, give the user a fresh, empty canvas. If there's an
+// existing drawing, offer to save it first. Returns true to proceed with the
+// tour, false to abort (user cancelled, or a save they asked for fell through
+// so we won't wipe their work).
+async function tourPrepareFreshCanvas() {
+  if (!tourDocumentHasContent()) return true;
+  if (typeof appChoice !== "function") return true;
+  const choice = await appChoice(
+    "The tour starts you on a fresh, empty canvas. Want to save your current drawing first?",
+    [
+      { label: "Save first", value: "save", primary: true },
+      { label: "Don't save", value: "discard" },
+      { label: "Cancel", value: null, cancel: true },
+    ],
+    { title: "Save your drawing?" },
+  );
+  if (!choice) return false; // Cancel / Esc — keep working, don't start the tour
+  if (choice === "save") {
+    const saved = (typeof fileSave === "function") ? await fileSave() : false;
+    if (!saved) return false; // save cancelled or failed — don't discard their work
+  }
+  if (typeof resetDocument === "function") resetDocument();
+  return true;
 }
 
 function maybeAutoStartTour() {
