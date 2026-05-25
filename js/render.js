@@ -470,6 +470,7 @@ function render() {
   drawPagesOnCanvas();
   drawSelectedShapeGlow();
   drawAllShapes();
+  drawStairsStoryLinks();
   drawSelection();
   drawCurveHandle();
   drawMarquee();

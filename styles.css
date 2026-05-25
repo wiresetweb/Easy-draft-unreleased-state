@@ -1954,13 +1954,86 @@ kbd {
 }
 .stairs-modal.hidden { display: none; }
 
-.stairs-modal-title {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text);
-  letter-spacing: -0.01em;
-  margin-bottom: 4px;
+/* Traditional / Spiral tab strip at the top of the stairs modal. */
+.stairs-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
 }
+.stairs-tab {
+  flex: 1;
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.stairs-tab:hover { color: var(--text); }
+.stairs-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.stairs-tab-panel { display: flex; flex-direction: column; gap: 6px; }
+.stairs-tab-panel.hidden { display: none; }
+
+/* "Stairs hug wall" toggle row. */
+.stairs-hug-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  margin-top: 2px;
+}
+.stairs-hug-row input { margin: 0; cursor: pointer; }
+
+/* Numeric stepper (value + stacked up/down arrows) used by the spiral tab. */
+.num-stepper {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.num-stepper-input {
+  flex: 1;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  text-align: center;
+}
+.num-stepper-btns {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-left: none;
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.num-stepper-btn {
+  appearance: none;
+  background: var(--surface-2, #f3f4f6);
+  border: none;
+  color: var(--text-muted);
+  font-size: 8px;
+  line-height: 1;
+  padding: 0 6px;
+  flex: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.num-stepper-btn:first-child { border-bottom: 1px solid var(--border); }
+.num-stepper-btn:hover { background: var(--border); color: var(--text); }
 
 .stairs-modal-actions {
   display: flex;

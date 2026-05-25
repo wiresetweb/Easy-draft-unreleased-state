@@ -4,10 +4,45 @@
 // Layers — story / sublayer model + layer tree UI
 // ==============================================================================
 
-function addStory() {
+// Stories carry an integer `level` so "up" / "down" is well-defined regardless
+// of array order: 0 = ground floor, positive = upper floors, -1 = basement.
+// Older saved documents predate the field — assign one by array position so
+// every story has a stable level before we reason about vertical neighbours.
+function ensureStoryLevels() {
+  state.stories.forEach((s, i) => {
+    if (typeof s.level !== "number") s.level = i;
+  });
+}
+
+function storyHasBasement() {
+  ensureStoryLevels();
+  return state.stories.some((s) => s.level < 0);
+}
+
+function storyNameForLevel(level) {
+  if (level < 0) return "Basement";
+  return `${ORDINALS[level] || `Story ${level + 1}`} Story`;
+}
+
+function getStoryByLevel(level) {
+  ensureStoryLevels();
+  return state.stories.find((s) => s.level === level) || null;
+}
+
+// kind: "basement" | "upper" | undefined. The very first story is always the
+// ground floor (level 0) regardless of kind.
+function addStory(kind) {
+  ensureStoryLevels();
   const isFirst = state.stories.length === 0;
-  const idx = state.stories.length;
-  const ordinal = ORDINALS[idx] || `Story ${idx + 1}`;
+  let level;
+  if (isFirst) {
+    level = 0;
+  } else if (kind === "basement") {
+    level = -1;
+  } else {
+    const maxLevel = state.stories.reduce((m, s) => Math.max(m, s.level), -1);
+    level = maxLevel + 1;
+  }
   const subNames = isFirst ? DEFAULT_SUBLAYERS_FIRST : DEFAULT_SUBLAYERS_OTHER;
   const sublayers = subNames.map((n) => ({
     id: makeId("L"),
@@ -18,7 +53,8 @@ function addStory() {
   }));
   state.stories.push({
     id: makeId("S"),
-    name: `${ordinal} Story`,
+    name: storyNameForLevel(level),
+    level,
     visible: true,
     expanded: true,
     sublayers,
@@ -29,6 +65,25 @@ function addStory() {
     const walls = sublayers.find((l) => l.name === WALL_LAYER_NAME);
     state.activeSublayerId = (walls || sublayers[0]).id;
   }
+}
+
+// The Stairs sub-layer for a given story, created on demand. Mirrors
+// getMeasurementsLayer so documents made before the Stairs layer existed (or
+// stories whose layer was deleted) still get a home for staircases.
+function getStairsLayer(story) {
+  if (!story) return null;
+  let layer = story.sublayers.find((l) => l.name === STAIRS_LAYER_NAME);
+  if (!layer) {
+    layer = {
+      id: makeId("L"),
+      name: STAIRS_LAYER_NAME,
+      visible: true,
+      shapes: [],
+      color: DEFAULT_LAYER_COLORS[STAIRS_LAYER_NAME] || DEFAULT_LAYER_COLOR_FALLBACK,
+    };
+    story.sublayers.push(layer);
+  }
+  return layer;
 }
 
 function addSublayer(storyId, name) {

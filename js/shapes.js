@@ -189,6 +189,10 @@ function bboxText(sh) {
   return bboxFromXsYs(xs, ys);
 }
 function bboxStairs(sh) {
+  if (sh.variant === "spiral" || !Array.isArray(sh.segments)) {
+    const r = sh.radius || (sh.diameter || 0) / 2 || 0;
+    return bboxFromXsYs([sh.x - r, sh.x + r], [sh.y - r, sh.y + r]);
+  }
   const xs = [], ys = [];
   for (const seg of sh.segments) {
     const u = { x: Math.cos(seg.angle), y: Math.sin(seg.angle) };
@@ -216,6 +220,15 @@ function bboxStairs(sh) {
 }
 function stairsSnapCorners(sh) {
   const out = [];
+  if (sh.variant === "spiral" || !Array.isArray(sh.segments)) {
+    const r = sh.radius || (sh.diameter || 0) / 2 || 0;
+    out.push(
+      { x: sh.x - r, y: sh.y - r }, { x: sh.x + r, y: sh.y - r },
+      { x: sh.x + r, y: sh.y + r }, { x: sh.x - r, y: sh.y + r },
+      { x: sh.x, y: sh.y },
+    );
+    return out;
+  }
   for (const seg of sh.segments) {
     const u = { x: Math.cos(seg.angle), y: Math.sin(seg.angle) };
     const p = { x: -u.y, y: u.x };
@@ -238,15 +251,16 @@ function stairsSnapCorners(sh) {
 function stairsCapture(sh) {
   return {
     x: sh.x, y: sh.y, angle: sh.angle || 0,
-    segments: sh.segments.map((s) => ({ ...s })),
+    segments: Array.isArray(sh.segments) ? sh.segments.map((s) => ({ ...s })) : null,
   };
 }
 function stairsRestore(sh, o) {
   sh.x = o.x; sh.y = o.y; sh.angle = o.angle;
-  sh.segments = o.segments.map((s) => ({ ...s }));
+  if (o.segments) sh.segments = o.segments.map((s) => ({ ...s }));
 }
 function stairsMove(sh, o, dx, dy) {
   sh.x = o.x + dx; sh.y = o.y + dy;
+  if (!Array.isArray(sh.segments)) return;
   for (let i = 0; i < sh.segments.length; i++) {
     const seg = sh.segments[i];
     const oseg = o.segments[i];
@@ -262,6 +276,7 @@ function stairsRotate(sh, o, rot, dAngle) {
   const p = rot(o.x, o.y);
   sh.x = p.x; sh.y = p.y;
   sh.angle = (o.angle || 0) + dAngle;
+  if (!Array.isArray(sh.segments)) return;
   for (let i = 0; i < sh.segments.length; i++) {
     const seg = sh.segments[i];
     const oseg = o.segments[i];
@@ -280,6 +295,7 @@ function stairsRotate(sh, o, rot, dAngle) {
 }
 function stairsDuplicate(copy, sh, offset) {
   copy.x = sh.x + offset; copy.y = sh.y + offset;
+  if (!Array.isArray(sh.segments)) return;
   copy.segments = sh.segments.map((seg) => {
     const out = { ...seg };
     if (seg.type === "flight") {

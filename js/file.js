@@ -47,6 +47,7 @@ function serializeDocument() {
     stories: state.stories.map((s) => ({
       id: s.id,
       name: s.name,
+      level: s.level,
       visible: s.visible,
       expanded: s.expanded,
       sublayers: s.sublayers.map((l) => ({
@@ -80,9 +81,10 @@ function loadDocument(data) {
   }
   // Rehydrate stories with defensive defaults so older / hand-edited files
   // don't crash the renderer if a field is missing.
-  state.stories = data.stories.map((s) => ({
+  state.stories = data.stories.map((s, i) => ({
     id: s.id || makeId("S"),
     name: s.name || "Story",
+    level: typeof s.level === "number" ? s.level : i,
     visible: s.visible !== false,
     expanded: s.expanded !== false,
     sublayers: (s.sublayers || []).map((l) => ({

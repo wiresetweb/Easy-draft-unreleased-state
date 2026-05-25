@@ -39,13 +39,18 @@ function findWallHit(ox, oy, dx, dy, maxT) {
   return closest;
 }
 
-// If one side of the proposed stairs is within ~6" of a parallel wall, shift the
-// start perpendicular so the side lands flush against it. Returns possibly-shifted start.
-function snapStairsStartToWall(start, angle, width) {
+// If one side of the proposed stairs is within ~7" of a parallel wall, shift the
+// start perpendicular so that side lands flush against the wall's near *face*
+// (accounting for the wall's framing thickness, not just its centerline).
+// Returns { start, hugWallId, hugSideSign }: hugWallId/hugSideSign let the
+// stairs re-hug later if that wall's thickness changes (see reflowStairsForWalls).
+function snapStairsStartToWall(start, angle, width, hug) {
+  const none = { start, hugWallId: null, hugSideSign: 0 };
+  if (hug === false) return none;
   const story = activeStory();
-  if (!story) return start;
+  if (!story) return none;
   const wallsLayer = story.sublayers.find((l) => l.name === WALL_LAYER_NAME);
-  if (!wallsLayer || !wallsLayer.visible) return start;
+  if (!wallsLayer || !wallsLayer.visible) return none;
 
   const u = { x: Math.cos(angle), y: Math.sin(angle) };
   const n = { x: -u.y, y: u.x };
@@ -55,6 +60,8 @@ function snapStairsStartToWall(start, angle, width) {
 
   let bestShift = 0;
   let bestAbs = snapTol;
+  let bestWallId = null;
+  let bestSign = 0;
 
   for (const wall of wallsLayer.shapes) {
     if (wall.type !== "line") continue;
@@ -66,22 +73,73 @@ function snapStairsStartToWall(start, angle, width) {
     const dot = Math.abs(wux * u.x + wuy * u.y);
     if (dot < parallelTol) continue;
 
-    // Perpendicular offset from start to the wall (signed in n direction)
+    // Perpendicular offset from start to the wall centerline (signed along n)
     const offN = (start.x - wall.x1) * n.x + (start.y - wall.y1) * n.y;
+    const halfT = (wall.thickness || 0) / 2; // wall half-thickness → face plane
 
-    // Shift needed so a side (start + n*halfW or start - n*halfW) sits on the wall
-    const shiftS1 = -offN - halfW;   // align +n side
-    const shiftS2 = halfW - offN;    // align -n side
+    // Shift so the stairs' near side sits flush on the wall's near face.
+    //   shiftS1: stairs end up on the -n side (near side +n at -halfT face)
+    //   shiftS2: stairs end up on the +n side (near side -n at +halfT face)
+    const shiftS1 = -offN - halfW - halfT;
+    const shiftS2 = halfW - offN + halfT;
 
-    const cand = Math.abs(shiftS1) < Math.abs(shiftS2) ? shiftS1 : shiftS2;
-    if (Math.abs(cand) < bestAbs) {
-      bestAbs = Math.abs(cand);
-      bestShift = cand;
+    const pick = Math.abs(shiftS1) < Math.abs(shiftS2)
+      ? { shift: shiftS1, sign: -1 }
+      : { shift: shiftS2, sign: 1 };
+    if (Math.abs(pick.shift) < bestAbs) {
+      bestAbs = Math.abs(pick.shift);
+      bestShift = pick.shift;
+      bestWallId = wall.id;
+      bestSign = pick.sign;
     }
   }
 
-  if (bestAbs >= snapTol) return start;
-  return { x: start.x + n.x * bestShift, y: start.y + n.y * bestShift };
+  if (bestAbs >= snapTol || !bestWallId) return none;
+  return {
+    start: { x: start.x + n.x * bestShift, y: start.y + n.y * bestShift },
+    hugWallId: bestWallId,
+    hugSideSign: bestSign,
+  };
+}
+
+// Re-hug stairs to a wall whose thickness just changed. Called from the wall
+// thickness picker so that drawing a thin line, dropping stairs against it, then
+// turning the line into a thick wall slides the stairs out to stay flush with
+// the new face instead of overlapping it. `walls` is the set of just-changed
+// wall lines. Translates each affected staircase as a rigid body.
+function reflowStairsForWalls(walls) {
+  if (!Array.isArray(walls) || !walls.length) return;
+  const changed = new Map(walls.map((w) => [w.id, w]));
+  forEachShape((sh) => {
+    if (sh.type !== "stairs" || !sh.hugWallId || !sh.hugSideSign) return;
+    const wall = changed.get(sh.hugWallId);
+    if (!wall) return;
+    const u = { x: Math.cos(sh.angle || 0), y: Math.sin(sh.angle || 0) };
+    const n = { x: -u.y, y: u.x };
+    const halfW = (sh.width || 0) / 2;
+    const halfT = (wall.thickness || 0) / 2;
+    const currentOffN = (sh.x - wall.x1) * n.x + (sh.y - wall.y1) * n.y;
+    const desiredOffN = sh.hugSideSign * (halfW + halfT);
+    const delta = desiredOffN - currentOffN;
+    if (Math.abs(delta) < 1e-6) return;
+    translateStairsShape(sh, n.x * delta, n.y * delta);
+  });
+}
+
+// Move a staircase rigidly by (dx, dy) — anchor plus every flight / landing
+// vertex. Spiral stairs only carry a single center point.
+function translateStairsShape(sh, dx, dy) {
+  sh.x += dx;
+  sh.y += dy;
+  if (!Array.isArray(sh.segments)) return;
+  for (const seg of sh.segments) {
+    if (seg.type === "flight") {
+      seg.x1 += dx; seg.y1 += dy;
+      seg.x2 += dx; seg.y2 += dy;
+    } else if (seg.type === "landing") {
+      seg.x += dx; seg.y += dy;
+    }
+  }
 }
 
 async function buildStairsSegments(start, angle, params) {
@@ -273,7 +331,32 @@ function drawStairsGhost() {
 }
 
 // ---------- Stairs modal ----------
-// ---------- Stairs modal ----------
+let stairsActiveTab = "traditional";
+
+function setStairsTab(tab) {
+  stairsActiveTab = (tab === "spiral") ? "spiral" : "traditional";
+  for (const btn of stairsModal.querySelectorAll(".stairs-tab")) {
+    const on = btn.dataset.stairsTab === stairsActiveTab;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-selected", String(on));
+  }
+  for (const panel of stairsModal.querySelectorAll(".stairs-tab-panel")) {
+    panel.classList.toggle("hidden", panel.dataset.stairsPanel !== stairsActiveTab);
+  }
+}
+
+// Clamp a stepper input to a whole number in [0, SPIRAL_MAX_STORIES].
+function clampSpiralValue(v) {
+  const n = Math.round(Number(v));
+  if (!isFinite(n) || n < 0) return 0;
+  return Math.min(SPIRAL_MAX_STORIES, n);
+}
+
+function adjustSpiralStepper(input, delta) {
+  if (!input) return;
+  input.value = String(clampSpiralValue((parseInt(input.value, 10) || 0) + delta));
+}
+
 function bindStairsModal() {
   stairsCancelBtn.addEventListener("click", cancelStairs);
   stairsBuildBtn.addEventListener("click", buildAndPlaceStairs);
@@ -284,14 +367,43 @@ function bindStairsModal() {
       else if (e.key === "Escape") { e.preventDefault(); cancelStairs(); }
     });
   }
+
+  for (const btn of stairsModal.querySelectorAll(".stairs-tab")) {
+    btn.addEventListener("click", () => setStairsTab(btn.dataset.stairsTab));
+  }
+
+  // Spiral steppers — arrow buttons nudge the value, manual edits get sanitized.
+  for (const stepper of stairsModal.querySelectorAll(".num-stepper")) {
+    const input = stepper.querySelector(".num-stepper-input");
+    for (const arrow of stepper.querySelectorAll(".num-stepper-btn")) {
+      arrow.addEventListener("click", () => {
+        adjustSpiralStepper(input, arrow.dataset.step === "up" ? 1 : -1);
+      });
+    }
+    if (input) {
+      input.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "ArrowUp") { e.preventDefault(); adjustSpiralStepper(input, 1); }
+        else if (e.key === "ArrowDown") { e.preventDefault(); adjustSpiralStepper(input, -1); }
+        else if (e.key === "Enter") { e.preventDefault(); buildAndPlaceStairs(); }
+        else if (e.key === "Escape") { e.preventDefault(); cancelStairs(); }
+      });
+      input.addEventListener("blur", () => { input.value = String(clampSpiralValue(input.value)); });
+    }
+  }
+
   stairsModal.addEventListener("pointerdown", (e) => e.stopPropagation());
 }
 
 function showStairsModal() {
+  setStairsTab("traditional");
   stairsCeilingInput.value = formatFeet(DEFAULT_STAIRS_CEILING_FT);
   stairsRiseInput.value = formatFeet(DEFAULT_STAIRS_RISE_FT);
   stairsRunInput.value = formatFeet(DEFAULT_STAIRS_RUN_FT);
   stairsWidthInput.value = formatFeet(DEFAULT_STAIRS_WIDTH_FT);
+  if (stairsHugWallInput) stairsHugWallInput.checked = true;
+  if (stairsSpiralUpInput) stairsSpiralUpInput.value = String(DEFAULT_SPIRAL_STORIES_UP);
+  if (stairsSpiralDownInput) stairsSpiralDownInput.value = String(DEFAULT_SPIRAL_STORIES_DOWN);
   stairsModal.classList.remove("hidden");
   setTimeout(() => stairsCeilingInput.focus(), 0);
   trapFocusIn(stairsModal);
@@ -308,8 +420,32 @@ function cancelStairs() {
   render();
 }
 
+// Place a finished staircase on the active story's Stairs layer (created on
+// demand) and select it.
+function placeStairsShape(shape) {
+  const story = activeStory();
+  const layer = getStairsLayer(story);
+  if (!layer) {
+    appAlert("Add a story before placing stairs.", { title: "No active story" });
+    return false;
+  }
+  pushHistory();
+  layer.shapes.push(shape);
+  state.selection.clear();
+  state.selection.add(shape.id);
+  state.stairsDirection = null;
+  hideStairsModal();
+  // The Stairs layer may have just been created on demand (older documents) —
+  // refresh the panels so it appears.
+  if (typeof renderLayerTree === "function") renderLayerTree();
+  if (typeof renderSheetLayerTree === "function") renderSheetLayerTree();
+  render();
+  return true;
+}
+
 async function buildAndPlaceStairs() {
   if (!state.stairsDirection) { hideStairsModal(); return; }
+  if (stairsActiveTab === "spiral") { await buildAndPlaceSpiral(); return; }
 
   const ceiling = parseFeet(stairsCeilingInput.value);
   const rise = parseFeet(stairsRiseInput.value);
@@ -321,8 +457,9 @@ async function buildAndPlaceStairs() {
     return;
   }
 
+  const hug = !stairsHugWallInput || stairsHugWallInput.checked;
   const { start: rawStart, angle } = state.stairsDirection;
-  const start = snapStairsStartToWall(rawStart, angle, width);
+  const { start, hugWallId, hugSideSign } = snapStairsStartToWall(rawStart, angle, width, hug);
   const result = await buildStairsSegments(start, angle, { width, rise, run, ceilingHeight: ceiling });
 
   if (!result.success) {
@@ -330,16 +467,10 @@ async function buildAndPlaceStairs() {
     return;
   }
 
-  const layer = activeSublayer();
-  if (!layer) {
-    await appAlert("Switch to a layer before placing stairs.", { title: "No active layer" });
-    return;
-  }
-
-  pushHistory();
-  const shape = {
+  placeStairsShape({
     id: makeId("X"),
     type: "stairs",
+    variant: "traditional",
     x: start.x,
     y: start.y,
     angle,
@@ -350,12 +481,32 @@ async function buildAndPlaceStairs() {
     segments: result.segments,
     turnDir: result.turnDir || null,
     stepCount: result.numSteps,
-  };
-  layer.shapes.push(shape);
-  state.selection.clear();
-  state.selection.add(shape.id);
+    hugWallId,
+    hugSideSign,
+  });
+}
 
-  state.stairsDirection = null;
-  hideStairsModal();
-  render();
+// Spiral staircase — placed centered on the drag-start point. Only asks how
+// many stories it climbs / descends; everything else uses sensible defaults.
+async function buildAndPlaceSpiral() {
+  const up = clampSpiralValue(stairsSpiralUpInput ? stairsSpiralUpInput.value : DEFAULT_SPIRAL_STORIES_UP);
+  const down = clampSpiralValue(stairsSpiralDownInput ? stairsSpiralDownInput.value : DEFAULT_SPIRAL_STORIES_DOWN);
+  if (up + down < 1) {
+    await appAlert("A spiral staircase has to go up and/or down at least one story.", { title: "Set the stories" });
+    return;
+  }
+  const center = state.stairsDirection.start;
+  const diameter = DEFAULT_SPIRAL_DIAMETER_FT;
+  placeStairsShape({
+    id: makeId("X"),
+    type: "stairs",
+    variant: "spiral",
+    x: center.x,
+    y: center.y,
+    angle: state.stairsDirection.angle || 0,
+    diameter,
+    radius: diameter / 2,
+    storiesUp: up,
+    storiesDown: down,
+  });
 }

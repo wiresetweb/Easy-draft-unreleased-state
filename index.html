@@ -379,22 +379,53 @@
       </div>
 
       <div class="stairs-modal hidden" id="stairs-modal">
-        <div class="stairs-modal-title">Build Stairs</div>
-        <div class="dim-row">
-          <label class="dim-label" for="stairs-ceiling">Ceiling Height</label>
-          <input type="text" class="dim-input" id="stairs-ceiling" autocomplete="off" spellcheck="false" />
+        <div class="stairs-tabs" role="tablist">
+          <button type="button" class="stairs-tab active" data-stairs-tab="traditional" role="tab" aria-selected="true">Traditional</button>
+          <button type="button" class="stairs-tab" data-stairs-tab="spiral" role="tab" aria-selected="false">Spiral</button>
         </div>
-        <div class="dim-row">
-          <label class="dim-label" for="stairs-rise">Step Rise</label>
-          <input type="text" class="dim-input" id="stairs-rise" autocomplete="off" spellcheck="false" />
+        <div class="stairs-tab-panel" data-stairs-panel="traditional">
+          <div class="dim-row">
+            <label class="dim-label" for="stairs-ceiling">Ceiling Height</label>
+            <input type="text" class="dim-input" id="stairs-ceiling" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="dim-row">
+            <label class="dim-label" for="stairs-rise">Step Rise</label>
+            <input type="text" class="dim-input" id="stairs-rise" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="dim-row">
+            <label class="dim-label" for="stairs-run">Step Run</label>
+            <input type="text" class="dim-input" id="stairs-run" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="dim-row">
+            <label class="dim-label" for="stairs-width">Width</label>
+            <input type="text" class="dim-input" id="stairs-width" autocomplete="off" spellcheck="false" />
+          </div>
+          <label class="stairs-hug-row">
+            <input type="checkbox" id="stairs-hug-wall" checked />
+            <span>Stairs hug wall</span>
+          </label>
         </div>
-        <div class="dim-row">
-          <label class="dim-label" for="stairs-run">Step Run</label>
-          <input type="text" class="dim-input" id="stairs-run" autocomplete="off" spellcheck="false" />
-        </div>
-        <div class="dim-row">
-          <label class="dim-label" for="stairs-width">Width</label>
-          <input type="text" class="dim-input" id="stairs-width" autocomplete="off" spellcheck="false" />
+        <div class="stairs-tab-panel hidden" data-stairs-panel="spiral">
+          <div class="dim-row">
+            <label class="dim-label" for="stairs-spiral-up">Stories up</label>
+            <div class="num-stepper" data-stepper="stairs-spiral-up">
+              <input type="text" class="dim-input num-stepper-input" id="stairs-spiral-up" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" />
+              <div class="num-stepper-btns">
+                <button type="button" class="num-stepper-btn" data-step="up" aria-label="Increase stories up">&#9650;</button>
+                <button type="button" class="num-stepper-btn" data-step="down" aria-label="Decrease stories up">&#9660;</button>
+              </div>
+            </div>
+          </div>
+          <div class="dim-row">
+            <label class="dim-label" for="stairs-spiral-down">Stories down</label>
+            <div class="num-stepper" data-stepper="stairs-spiral-down">
+              <input type="text" class="dim-input num-stepper-input" id="stairs-spiral-down" inputmode="numeric" autocomplete="off" spellcheck="false" value="0" />
+              <div class="num-stepper-btns">
+                <button type="button" class="num-stepper-btn" data-step="up" aria-label="Increase stories down">&#9650;</button>
+                <button type="button" class="num-stepper-btn" data-step="down" aria-label="Decrease stories down">&#9660;</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="stairs-modal-actions">
           <button class="btn-mini" id="stairs-cancel">Cancel</button>

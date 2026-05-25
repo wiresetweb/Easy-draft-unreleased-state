@@ -13,7 +13,7 @@ function cloneShape(sh) {
 function snapshot() {
   return {
     stories: state.stories.map((s) => ({
-      id: s.id, name: s.name, visible: s.visible, expanded: s.expanded,
+      id: s.id, name: s.name, level: s.level, visible: s.visible, expanded: s.expanded,
       sublayers: s.sublayers.map((l) => ({
         id: l.id, name: l.name, visible: l.visible, color: l.color,
         shapes: l.shapes.map(cloneShape),
@@ -33,7 +33,7 @@ function pushHistory(label) {
 
 function restore(snap) {
   state.stories = snap.stories.map((s) => ({
-    id: s.id, name: s.name, visible: s.visible, expanded: s.expanded,
+    id: s.id, name: s.name, level: s.level, visible: s.visible, expanded: s.expanded,
     sublayers: s.sublayers.map((l) => ({
       id: l.id, name: l.name, visible: l.visible, color: l.color,
       shapes: l.shapes.map(cloneShape),
