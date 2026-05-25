@@ -51,6 +51,34 @@ function tourCountShapesOnLayerName(name) {
   return n;
 }
 
+// Count placed appliances of a given kind (e.g. "range" = stove, "fridge").
+function tourCountApplianceKind(kind) {
+  let n = 0;
+  forEachShape((sh) => { if (sh.type === "appliance" && sh.kind === kind) n++; });
+  return n;
+}
+
+// The second floor the tour has the user add (the first upper story, level 1)
+// and the shape count on its Furniture layer — lets us tell "furniture placed
+// upstairs" apart from the pieces already sitting on the ground floor.
+function tourUpperStory() {
+  // Prefer the story the user just added during the tour (so replays on a
+  // multi-story document still target the right floor); fall back to level 1.
+  const pre = tourSnapshot.preStoryIds;
+  if (pre && Array.isArray(state.stories)) {
+    const added = state.stories.find((s) => !pre.has(s.id));
+    if (added) return added;
+  }
+  if (typeof getStoryByLevel === "function") return getStoryByLevel(1);
+  return Array.isArray(state.stories) ? state.stories.find((s) => s.level === 1) || null : null;
+}
+function tourUpperFurnitureCount() {
+  const story = tourUpperStory();
+  if (!story) return 0;
+  const sub = story.sublayers.find((l) => l.name === FURNITURE_LAYER_NAME);
+  return sub ? sub.shapes.length : 0;
+}
+
 function tourSnapshotShapeMap(predicate, sigFn) {
   const m = new Map();
   forEachShape((sh) => { if (predicate(sh)) m.set(sh.id, sigFn(sh)); });
@@ -369,8 +397,8 @@ function cabinTourStepList() {
     {
       id: "welcome",
       title: "Let's build a cabin",
-      copy: "We'll draw a small cabin together, start to finish — four walls, a door, a window, " +
-            "a stick of furniture, a dimension, and a printable sheet at the end. " +
+      copy: "We'll draw a small cabin together, start to finish — walls, a door and window, furniture, " +
+            "a kitchen, then a second floor with stairs, and a printable sheet at the end. " +
             "Take it at your own pace; press Skip or Esc to leave any time.",
       manual: true,
       manualLabel: "Start building",
@@ -506,10 +534,134 @@ function cabinTourStepList() {
       advance: () => tourCountShapesOnLayerName("Furniture") > (tourSnapshot.furnitureCount || 0),
     },
     {
+      id: "cabin-kitchen-layer",
+      title: "Set up the kitchen",
+      copy: "Let's add a kitchen. Click the word 'Kitchen' in the layer panel — that opens the kitchen catalog " +
+            "and its cabinet tools.",
+      anchor: () => {
+        const sub = tourFindSublayerByName("Kitchen");
+        if (!sub) return null;
+        const row = document.querySelector(`.sub-row[data-sub-id="${sub.id}"]`);
+        return row ? (row.querySelector(".sub-name") || row) : null;
+      },
+      enter: () => {
+        // Make sure the layer tree is showing (the panel collapses on palette
+        // layers) and we're on the Select tool so the click lands cleanly.
+        if (layersPanel) layersPanel.classList.remove("minimized");
+        if (typeof setTool === "function") setTool("select");
+      },
+      advance: () => {
+        const sub = activeSublayer();
+        return !!(sub && sub.name === "Kitchen");
+      },
+    },
+    {
+      id: "cabin-cabinet",
+      title: "Build a run of cabinets",
+      copy: "Click 'Cabinet builder' in the kitchen panel. Then click along a wall to drop the run's corners — " +
+            "one click per corner — and hit 'Finish' when you're done. Easy Draft keeps the counter flush to the wall.",
+      anchor: () => document.querySelector('[data-palette-tool="cabinet-builder"]')
+        || document.getElementById("palette-panel"),
+      enter: () => { tourSnapshot.cabinetCount = tourCountShapesByType("cabinet"); },
+      advance: () => tourCountShapesByType("cabinet") > (tourSnapshot.cabinetCount || 0),
+    },
+    {
+      id: "cabin-stove",
+      title: "Add a stove",
+      copy: "Now drag a 'Range' (that's the stove) from the kitchen catalog onto a wall. It snaps into the counter " +
+            "line just like the cabinets.",
+      anchor: () => document.getElementById("palette-panel"),
+      enter: () => { tourSnapshot.stoveCount = tourCountApplianceKind("range"); },
+      advance: () => tourCountApplianceKind("range") > (tourSnapshot.stoveCount || 0),
+    },
+    {
+      id: "cabin-fridge",
+      title: "Add a refrigerator",
+      copy: "Drag a 'Refrigerator' from the catalog into the kitchen too. Your cabin now has a working kitchen.",
+      anchor: () => document.getElementById("palette-panel"),
+      enter: () => { tourSnapshot.fridgeCount = tourCountApplianceKind("fridge"); },
+      advance: () => tourCountApplianceKind("fridge") > (tourSnapshot.fridgeCount || 0),
+    },
+    {
+      id: "cabin-add-floor",
+      title: "Add a second floor",
+      copy: "Cabins can have an upstairs too. Click '+ Story' at the top of the layers bar, then choose " +
+            "'Upper floor'. A whole new set of layers appears for the second story.",
+      anchor: () => document.getElementById("add-story-btn"),
+      enter: () => {
+        tourSnapshot.preStoryIds = new Set((state.stories || []).map((s) => s.id));
+      },
+      // Advance only when a *new* upper story (level >= 1) appears, so the step
+      // doesn't auto-skip when replaying on a document that already has floors.
+      advance: () => {
+        const pre = tourSnapshot.preStoryIds;
+        if (!pre || !Array.isArray(state.stories)) return false;
+        return state.stories.some((s) => !pre.has(s.id) && typeof s.level === "number" && s.level >= 1);
+      },
+    },
+    {
+      id: "cabin-stairs",
+      title: "Run stairs upstairs",
+      copy: "Connect the floors with stairs. Pick the Stairs tool on the left toolbar, then drag along the longest " +
+            "open span of your cabin (so the run has room to fit) and click 'Build' in the dialog. The stairs land " +
+            "on a Stairs layer and automatically show on the floor above with a 'DN' label.",
+      anchor: () => document.querySelector('.tool[data-tool="stairs"]'),
+      enter: () => {
+        // Stairs route to the active story's Stairs layer, and the Stairs tool
+        // is disabled on catalog layers — drop onto the ground-floor Stairs
+        // layer (creating it if an older document lacks one) so the tool works
+        // and the run rises to the new floor above.
+        const ground = (typeof getStoryByLevel === "function")
+          ? getStoryByLevel(0) : (state.stories && state.stories[0]) || null;
+        const layer = (ground && typeof getStairsLayer === "function") ? getStairsLayer(ground) : null;
+        if (layer) {
+          state.activeSublayerId = layer.id;
+          if (typeof renderLayerTree === "function") renderLayerTree();
+          if (typeof updatePaletteVisibility === "function") updatePaletteVisibility();
+        }
+        tourSnapshot.stairCount = tourCountShapesByType("stairs");
+      },
+      advance: () => tourCountShapesByType("stairs") > (tourSnapshot.stairCount || 0),
+    },
+    {
+      id: "cabin-upstairs-layer",
+      title: "Head upstairs",
+      copy: "Switch up to the new floor: in the layer panel, find the upstairs story group and click its " +
+            "'Furniture' layer. Both floors stay visible so you can line things up over what's below.",
+      anchor: () => {
+        const story = tourUpperStory();
+        if (!story) return null;
+        const sub = story.sublayers.find((l) => l.name === FURNITURE_LAYER_NAME);
+        if (!sub) return null;
+        const row = document.querySelector(`.sub-row[data-sub-id="${sub.id}"]`);
+        return row ? (row.querySelector(".sub-name") || row) : null;
+      },
+      enter: () => {
+        if (layersPanel) layersPanel.classList.remove("minimized");
+        if (typeof setTool === "function") setTool("select");
+      },
+      advance: () => {
+        const story = tourUpperStory();
+        const sub = activeSublayer();
+        return !!(story && sub && sub.name === FURNITURE_LAYER_NAME
+          && story.sublayers.some((l) => l.id === sub.id));
+      },
+    },
+    {
+      id: "cabin-upstairs-furnish",
+      title: "Furnish the upstairs",
+      copy: "Drag a bed or any piece from the catalog onto the second floor. It lands on the upstairs Furniture " +
+            "layer, separate from what's downstairs.",
+      anchor: () => document.getElementById("palette-panel"),
+      enter: () => { tourSnapshot.upperFurnitureCount = tourUpperFurnitureCount(); },
+      advance: () => tourUpperFurnitureCount() > (tourSnapshot.upperFurnitureCount || 0),
+    },
+    {
       id: "cabin-pick-measure",
       title: "Grab the Measure tool",
       copy: "Time to dimension your cabin. Click the Measure tool on the left toolbar (or press M).",
       anchor: () => document.querySelector('.tool[data-tool="measure"]'),
+      enter: () => { tourEnsureLayerByName("Walls"); },
       advance: () => state.tool === "measure",
     },
     {
