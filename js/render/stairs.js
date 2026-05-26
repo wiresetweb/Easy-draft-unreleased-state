@@ -42,11 +42,14 @@ function drawStairsLanding(seg) {
   const u = { x: Math.cos(seg.angle), y: Math.sin(seg.angle) };
   const p = { x: -u.y, y: u.x };
   const halfW = seg.width / 2;
+  // Corner landings stretch along the incoming flight (lengthU) to reach the
+  // wall; older square landings (no lengthU) fall back to the width.
+  const halfU = (seg.lengthU != null ? seg.lengthU : seg.width) / 2;
 
-  const c1 = { x: seg.x - u.x * halfW + p.x * halfW, y: seg.y - u.y * halfW + p.y * halfW };
-  const c2 = { x: seg.x - u.x * halfW - p.x * halfW, y: seg.y - u.y * halfW - p.y * halfW };
-  const c3 = { x: seg.x + u.x * halfW - p.x * halfW, y: seg.y + u.y * halfW - p.y * halfW };
-  const c4 = { x: seg.x + u.x * halfW + p.x * halfW, y: seg.y + u.y * halfW + p.y * halfW };
+  const c1 = { x: seg.x - u.x * halfU + p.x * halfW, y: seg.y - u.y * halfU + p.y * halfW };
+  const c2 = { x: seg.x - u.x * halfU - p.x * halfW, y: seg.y - u.y * halfU - p.y * halfW };
+  const c3 = { x: seg.x + u.x * halfU - p.x * halfW, y: seg.y + u.y * halfU - p.y * halfW };
+  const c4 = { x: seg.x + u.x * halfU + p.x * halfW, y: seg.y + u.y * halfU + p.y * halfW };
 
   const sc1 = worldToScreen(c1.x, c1.y);
   const sc2 = worldToScreen(c2.x, c2.y);

@@ -308,6 +308,11 @@ const state = {
 
   cabinetBuilder: null, // { points: [{x,y}], depth, side, layerId, storyId } while building
 
+  // Guided-tour overlay drawn on the canvas (ghost cabin outline, cabinet run,
+  // stairs drag arrow). Set by tour steps, cleared when the tour ends. See
+  // drawTourGuide() in tour.js.
+  tourGuide: null,
+
   // Counter for consecutive empty selection attempts that landed near shapes
   // on inactive layers — used to surface the "did you mean another layer?"
   // hint after the user has clearly tried more than once.

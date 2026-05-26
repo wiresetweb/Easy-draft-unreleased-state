@@ -194,10 +194,17 @@ async function buildStairsSegments(start, angle, params) {
     };
   }
 
-  // Pick a turn direction by checking sides at the landing center
+  // The landing fills the corner: it runs from the end of flight 1 up to the
+  // face of the wall ahead, so the second flight can sit flush against that
+  // wall instead of floating a landing-width away from it.
+  const halfW = width / 2;
+  const halfT = (hit.wall && hit.wall.thickness ? hit.wall.thickness : 0) / 2;
+  const wallFaceU = hit.t - halfT;                 // u-distance to the wall's near face
+  const landingLenU = Math.max(width, wallFaceU - flight1Length);
+  const landingCenterU = flight1Length + landingLenU / 2;
   const landingCenter = {
-    x: flight1End.x + u.x * landingSize / 2,
-    y: flight1End.y + u.y * landingSize / 2,
+    x: start.x + u.x * landingCenterU,
+    y: start.y + u.y * landingCenterU,
   };
   const leftPerp = { x: -u.y, y: u.x };
   const rightPerp = { x: u.y, y: -u.x };
@@ -227,9 +234,12 @@ async function buildStairsSegments(start, angle, params) {
 
   const newU = turnDir === "left" ? leftPerp : rightPerp;
   const newAngle = Math.atan2(newU.y, newU.x);
+  // Hug the wall ahead: flight 2 runs parallel to it, so place flight 2's
+  // centerline a half-width back from the wall face (its far side lands flush),
+  // starting from the edge of the landing on the turn side.
   const flight2Start = {
-    x: landingCenter.x + newU.x * landingSize / 2,
-    y: landingCenter.y + newU.y * landingSize / 2,
+    x: start.x + u.x * (wallFaceU - halfW) + newU.x * halfW,
+    y: start.y + u.y * (wallFaceU - halfW) + newU.y * halfW,
   };
   const flight2Length = remainingSteps * run;
   const flight2Hit = findWallHit(flight2Start.x, flight2Start.y, newU.x, newU.y, flight2Length);
@@ -250,7 +260,7 @@ async function buildStairsSegments(start, angle, params) {
     numSteps,
     segments: [
       { type: "flight", x1: start.x, y1: start.y, x2: flight1End.x, y2: flight1End.y, angle, width, run, steps: stepsFlight1, stepStart: 1 },
-      { type: "landing", x: landingCenter.x, y: landingCenter.y, angle, width },
+      { type: "landing", x: landingCenter.x, y: landingCenter.y, angle, width, lengthU: landingLenU },
       { type: "flight", x1: flight2Start.x, y1: flight2Start.y, x2: flight2End.x, y2: flight2End.y, angle: newAngle, width, run, steps: remainingSteps, stepStart: stepsFlight1 + 1 },
     ],
   };
