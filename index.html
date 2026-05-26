@@ -301,14 +301,16 @@
             <button class="wall-thickness-btn" data-preset="int" title='Interior partition: 2×4 stud + ½" drywall each side (4½")'>Int.</button>
             <button class="wall-thickness-btn" data-preset="ext-wood" title='Exterior wood-framed: 2×6 stud + ½" drywall + ½" sheathing (6½")'>Ext. wood</button>
             <button class="wall-thickness-btn" data-preset="ext-block" title='Exterior CMU/block (8")'>Ext. blk</button>
-            <input type="text" class="wall-thickness-input" id="wall-thickness-input" placeholder="custom" autocomplete="off" spellcheck="false" />
+            <button class="wall-thickness-btn" data-preset="other" title="Any custom depth — adjust below">Other</button>
           </div>
         </div>
-        <div class="dim-row wall-assembly-row hidden" id="wall-assembly-row">
-          <label class="dim-label" title="This wall's thickness isn't a standard preset — pick its assembly so the estimate can frame it">Assembly</label>
-          <select class="wall-assembly-select" id="wall-assembly-select" title="Construction assembly for the materials estimate">
-            <option value="">&mdash; pick &mdash;</option>
-          </select>
+        <div class="dim-row wall-other-row hidden" id="wall-other-row">
+          <label class="dim-label">Depth</label>
+          <div class="dim-stepper">
+            <button type="button" class="dim-step-btn" id="wall-depth-dec" aria-label="Thinner">&minus;</button>
+            <span class="dim-width-readout" id="wall-depth-readout" aria-live="polite">&mdash;</span>
+            <button type="button" class="dim-step-btn" id="wall-depth-inc" aria-label="Thicker">+</button>
+          </div>
         </div>
       </div>
 

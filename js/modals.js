@@ -168,34 +168,28 @@ function bindLineModal() {
     const wallBtn = e.target.closest(".wall-thickness-btn");
     if (wallBtn) {
       const preset = wallBtn.dataset.preset;
-      const t = preset === "none" ? 0 : (WALL_THICKNESS_PRESETS[preset] || 0);
-      applyWallThickness(t);
+      if (preset === "other") {
+        // Enter custom-depth mode: seed from the current thickness (or a
+        // sensible 5" start) and reveal the stepper.
+        lineModalEl.dataset.wallOther = "1";
+        const targets = getSelectedWallLines();
+        const cur = targets.length ? (targets[0].thickness || 0) : 0;
+        applyWallThickness(cur > 0 ? cur : 5 / 12);
+        updateLineModal();
+      } else {
+        delete lineModalEl.dataset.wallOther;
+        const t = preset === "none" ? 0 : (WALL_THICKNESS_PRESETS[preset] || 0);
+        applyWallThickness(t);
+      }
     }
   });
   lineModalEl.addEventListener("pointerdown", (e) => e.stopPropagation());
 
-  wallThicknessInput.addEventListener("keydown", (e) => {
-    e.stopPropagation();
-    if (e.key === "Enter") { e.preventDefault(); applyWallThicknessFromInput(); wallThicknessInput.blur(); }
-    else if (e.key === "Escape") { e.preventDefault(); wallThicknessInput.blur(); }
-  });
-  wallThicknessInput.addEventListener("blur", applyWallThicknessFromInput);
-
-  // Assembly picker for walls whose thickness isn't a known preset. Populate
-  // from the single WALL_ASSEMBLIES source so the options never drift.
-  for (const key in WALL_ASSEMBLIES) {
-    const opt = document.createElement("option");
-    opt.value = key;
-    opt.textContent = WALL_ASSEMBLIES[key].label;
-    wallAssemblySelect.appendChild(opt);
-  }
-  wallAssemblySelect.addEventListener("pointerdown", (e) => e.stopPropagation());
-  wallAssemblySelect.addEventListener("change", () => applyWallAssembly(wallAssemblySelect.value));
+  wallDepthDec.addEventListener("click", () => stepWallDepth(-1));
+  wallDepthInc.addEventListener("click", () => stepWallDepth(1));
 }
 
-// True when a thickness value matches one of the standard presets (which
-// auto-resolve to an assembly). thickness 0 / undefined and custom values are
-// unresolved and need an explicit assembly tag for the estimate.
+// True when a thickness value matches one of the standard presets.
 function wallThicknessIsPreset(t) {
   if (!t) return false;
   for (const key in WALL_THICKNESS_PRESETS) {
@@ -204,20 +198,15 @@ function wallThicknessIsPreset(t) {
   return false;
 }
 
-function applyWallAssembly(key) {
+// Adjust a custom wall depth in 1/2" steps (10 mm in metric).
+function stepWallDepth(dir) {
   const targets = getSelectedWallLines();
   if (!targets.length) return;
-  let changed = false;
-  for (const sh of targets) {
-    if ((sh.assembly || "") !== (key || "")) { changed = true; break; }
-  }
-  if (!changed) return;
-  pushHistory(key ? "Set wall assembly" : "Cleared wall assembly");
-  for (const sh of targets) {
-    if (key) sh.assembly = key;
-    else delete sh.assembly;
-  }
-  render();
+  const step = state.units === "metric" ? 10 * MM_TO_FT : 0.5 / 12;
+  const cur = targets[0].thickness || (5 / 12);
+  let next = (Math.round(cur / step) + dir) * step;
+  if (next < step) next = step;
+  applyWallThickness(next);
 }
 
 function applyWallThickness(t) {
@@ -239,19 +228,6 @@ function applyWallThickness(t) {
   // Stairs that hug one of these walls slide out to stay flush with the new face.
   if (typeof reflowStairsForWalls === "function") reflowStairsForWalls(targets);
   render();
-}
-
-function applyWallThicknessFromInput() {
-  const v = parseFeet(wallThicknessInput.value);
-  if (v === null || v < 0) {
-    // Restore display from the first selected wall's current value.
-    const targets = getSelectedWallLines();
-    wallThicknessInput.value = targets.length && targets[0].thickness
-      ? formatFeet(targets[0].thickness)
-      : "";
-    return;
-  }
-  applyWallThickness(v);
 }
 
 function updateLineModal() {
@@ -278,7 +254,7 @@ function updateLineModal() {
   // selection is wall lines (single or multiple).
   lineStrokeRow.classList.toggle("hidden", !singleShape);
   wallThicknessRow.classList.toggle("hidden", !isWallSelection);
-  if (!isWallSelection) wallAssemblyRow.classList.add("hidden");
+  if (!isWallSelection) { wallOtherRow.classList.add("hidden"); delete lineModalEl.dataset.wallOther; }
 
   // Position over the bbox of either the single shape or the whole selection.
   const bbox = singleShape ? shapeBBox(singleShape) : selectionBBox();
@@ -308,37 +284,31 @@ function updateLineModal() {
   }
 
   if (isWallSelection) {
-    // Highlight the active preset, if all selected walls share one. Mixed
-    // thicknesses → no preset is "active", and the input shows blank.
+    // Highlight the active preset, if all selected walls share one. A custom
+    // (non-preset, non-zero) thickness lights up "Other" and shows the stepper.
     const targets = getSelectedWallLines();
     const first = targets[0].thickness || 0;
     const allSame = targets.every((sh) => Math.abs((sh.thickness || 0) - first) < 1e-9);
     let activePreset = null;
     if (allSame) {
       if (first === 0) activePreset = "none";
-      else {
+      else if (wallThicknessIsPreset(first)) {
         for (const key in WALL_THICKNESS_PRESETS) {
           if (Math.abs(WALL_THICKNESS_PRESETS[key] - first) < 1e-6) { activePreset = key; break; }
         }
+      } else {
+        activePreset = "other";
       }
     }
+    // Custom thickness, or the user clicked Other → show the depth stepper.
+    const showOther = activePreset === "other" || lineModalEl.dataset.wallOther === "1";
+    if (showOther) activePreset = "other";
     for (const btn of wallThicknessRow.querySelectorAll(".wall-thickness-btn")) {
       btn.classList.toggle("active", btn.dataset.preset === activePreset);
     }
-    if (document.activeElement !== wallThicknessInput) {
-      wallThicknessInput.value = allSame && first > 0 ? formatFeet(first) : "";
-    }
-
-    // Show the assembly picker when any selected wall's thickness isn't a
-    // preset (centerline / custom) — those are unresolved for the estimate.
-    const anyUnresolved = targets.some((sh) => !wallThicknessIsPreset(sh.thickness || 0));
-    wallAssemblyRow.classList.toggle("hidden", !anyUnresolved);
-    if (anyUnresolved) {
-      const firstA = targets[0].assembly || "";
-      const allSameA = targets.every((sh) => (sh.assembly || "") === firstA);
-      if (document.activeElement !== wallAssemblySelect) {
-        wallAssemblySelect.value = allSameA ? firstA : "";
-      }
+    wallOtherRow.classList.toggle("hidden", !showOther);
+    if (showOther) {
+      wallDepthReadout.textContent = allSame && first > 0 ? formatFeet(first) : "—";
     }
   }
 }
