@@ -135,6 +135,7 @@ const SHEET_TYPE_DEFAULT_TITLES = {
   drawing:  "First Floor Plan",
   schedule: "Door & Window Schedule",
   index:    "Sheet Index",
+  estimate: "Materials Estimate",
 };
 const ALL_DEFAULT_TITLES = new Set(Object.values(SHEET_TYPE_DEFAULT_TITLES));
 
@@ -443,6 +444,8 @@ function renderPlanView() {
     drawScheduleTable(sheet, vp, ppi);
   } else if (sheetType === "index") {
     drawIndexTable(sheet, vp, ppi);
+  } else if (sheetType === "estimate") {
+    drawEstimateSheet(sheet, vp, ppi);
   } else {
     drawViewport(sheet, vp, ppi);
     drawNorthArrow(sheet, vp, ppi);

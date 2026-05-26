@@ -77,6 +77,7 @@
               <option value="drawing">Drawing</option>
               <option value="schedule">Schedule</option>
               <option value="index">Sheet Index</option>
+              <option value="estimate">Estimate</option>
             </select>
           </div>
           <div class="prop-row">
@@ -153,6 +154,9 @@
         <div class="sidebar-title"><span>Export</span></div>
         <div class="action-row">
           <button class="action-icon action-text" id="plan-export-btn" title="Export every sheet as a PDF">Export PDF&hellip;</button>
+        </div>
+        <div class="action-row">
+          <button class="action-icon action-text" id="plan-estimate-csv-btn" title="Export the materials estimate as a CSV">Estimate CSV&hellip;</button>
         </div>
       </div>
 
@@ -600,6 +604,7 @@
     <button class="menu-item" data-file-action="save-as" role="menuitem">Save As&hellip;</button>
     <div class="menu-separator"></div>
     <button class="menu-item" data-file-action="export" role="menuitem">Export&hellip;</button>
+    <button class="menu-item" data-file-action="export-estimate-csv" role="menuitem">Export Estimate CSV&hellip;</button>
     <div class="menu-separator"></div>
     <button class="menu-item" data-file-action="settings" role="menuitem">Settings&hellip;</button>
     <button class="menu-item" data-file-action="walkthrough" role="menuitem">Walkthrough</button>
@@ -645,6 +650,7 @@
   <script src="js/tools/furniture-builder.js"></script>
   <script src="js/estimate.js"></script>
   <script src="js/plan-view.js"></script>
+  <script src="js/render/estimate-sheet.js"></script>
   <script src="js/file.js"></script>
   <script src="js/cache.js"></script>
   <script src="js/feedback.js"></script>

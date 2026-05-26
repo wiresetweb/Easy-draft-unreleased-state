@@ -339,6 +339,40 @@ async function fileSaveAs() {
   return true;
 }
 
+// ---------- Estimate CSV export ----------
+// Writes every estimate line item (and the Class-A gaps) to a CSV. Mirrors the
+// PDF-export entry points (File menu + Plan-mode sidebar). Quantities only —
+// the same numbers the Estimate sheet shows.
+function exportEstimateCsv() {
+  if (typeof computeEstimate !== "function") return;
+  const est = computeEstimate(state);
+  const esc = (v) => {
+    const s = String(v == null ? "" : v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [];
+  lines.push(["Category", "Story", "Item", "Qty", "Unit", "Basis/Notes"].map(esc).join(","));
+  // Gaps first so a reader sees what was excluded before trusting the totals.
+  for (const g of est.gaps) {
+    lines.push(["Missing input (Class A)", "", g.label, "", "", "not estimated — fill in to include"].map(esc).join(","));
+  }
+  for (const li of est.lineItems) {
+    lines.push([li.category, li.storyName, li.item, li.qty, li.unit, li.basis].map(esc).join(","));
+  }
+  const csv = lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const base = (state.fileName || DEFAULT_FILENAME).replace(/\.dstudio\.json$/i, "").replace(/\.json$/i, "");
+  a.download = (base || "drawing") + "-estimate.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (typeof logUserAction === "function") logUserAction("Exported estimate CSV");
+}
+
 // ---------- Export ----------
 // Print-to-PDF pipeline: each sheet is rendered at print DPI to the live
 // canvas, captured as a PNG dataURL, and dropped into #print-stage as one
@@ -477,6 +511,7 @@ function bindFileMenu() {
     else if (action === "save") fileSave();
     else if (action === "save-as") fileSaveAs();
     else if (action === "export") fileExport();
+    else if (action === "export-estimate-csv") exportEstimateCsv();
     else if (action === "settings") {
       showSettingsModal();
     }
@@ -499,6 +534,10 @@ function bindFileMenu() {
   // Plan-mode sidebar Export button — same handler as the File menu entry.
   const planExportBtn = document.getElementById("plan-export-btn");
   if (planExportBtn) planExportBtn.addEventListener("click", fileExport);
+
+  // Plan-mode sidebar Estimate-CSV button.
+  const planCsvBtn = document.getElementById("plan-estimate-csv-btn");
+  if (planCsvBtn) planCsvBtn.addEventListener("click", exportEstimateCsv);
 
   updateFileLabel();
 }
