@@ -24,38 +24,25 @@ function bindDimModal() {
     applyDoorFlip(btn.dataset.flip);
   });
 
-  dimRoughHeightInput.addEventListener("keydown", (e) => {
-    e.stopPropagation();
-    if (e.key === "Enter") { e.preventDefault(); applyRoughHeightFromInput(); dimRoughHeightInput.blur(); }
-    else if (e.key === "Escape") { e.preventDefault(); dimRoughHeightInput.blur(); }
-  });
-  dimRoughHeightInput.addEventListener("blur", applyRoughHeightFromInput);
+  dimHeightDec.addEventListener("click", () => stepDimHeight(-1));
+  dimHeightInc.addEventListener("click", () => stepDimHeight(1));
 }
 
-// Rough-opening height is Class-A for the estimate (never guessed from the
-// catalog name). Blank clears it back to a gap; a valid feet/inches value sets
-// it. Stored on the door / window shape, so it round-trips via cloneShape.
-function applyRoughHeightFromInput() {
+// Opening "Height (to Top)" — floor to the top of the opening. Prefilled from
+// the type/size-aware default and adjusted in 2" steps. Stored on the shape
+// (so it round-trips via cloneShape); clearing isn't offered since the default
+// is always a sensible standard.
+function stepDimHeight(dir) {
   const id = dimModal.dataset.shapeId;
   const shape = id ? findShapeById(id) : null;
   if (!shape || (shape.type !== "door" && shape.type !== "window")) return;
-  const raw = dimRoughHeightInput.value.trim();
-  if (raw === "") {
-    if (shape.roughHeight != null) {
-      pushHistory("Cleared rough height");
-      delete shape.roughHeight;
-      render();
-    }
-    return;
-  }
-  const v = parseFeet(raw);
-  if (v === null || v <= 0) {
-    dimRoughHeightInput.value = shape.roughHeight != null ? formatFeet(shape.roughHeight) : "";
-    return;
-  }
-  if (shape.roughHeight != null && Math.abs(shape.roughHeight - v) < 1e-6) return;
-  pushHistory(`Set rough height ${formatFeet(v)}`);
-  shape.roughHeight = v;
+  const step = state.units === "metric" ? 50 * MM_TO_FT : 2 / 12;
+  const cur = effectiveOpeningHeightFt(shape);
+  let next = (Math.round(cur / step) + dir) * step;
+  if (next < step) next = step;
+  if (Math.abs(next - cur) < 1e-6) return;
+  pushHistory(`Set opening height ${formatFeet(next)}`);
+  shape.roughHeight = next;
   render();
 }
 
@@ -133,10 +120,7 @@ function updateDimModal() {
 
   dimModal.dataset.shapeId = shape.id;
   dimWidthReadout.textContent = formatFeet(shape.width);
-
-  if (document.activeElement !== dimRoughHeightInput) {
-    dimRoughHeightInput.value = shape.roughHeight != null ? formatFeet(shape.roughHeight) : "";
-  }
+  dimHeightReadout.textContent = formatFeet(effectiveOpeningHeightFt(shape));
 
   doorFlipRow.classList.toggle("hidden", shape.type !== "door");
 }

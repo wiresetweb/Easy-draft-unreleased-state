@@ -213,6 +213,33 @@ function mergeEstimateSettings(saved) {
   return merge(base, saved);
 }
 
+// Standard opening heights (floor to top of opening — the "Height (to Top)").
+// Prefilled and user-editable; openings are no longer a hard Class-A gap.
+const DEFAULT_DOOR_HEIGHT_FT = 6 + 8 / 12;   // 6'-8" head height
+const DEFAULT_GARAGE_HEIGHT_FT = 7;          // 7'-0"
+const DEFAULT_WINDOW_HEAD_FT = 6 + 8 / 12;   // windows align to the door head
+const DEFAULT_WINDOW_SIZE_FT = 3.5;          // fallback vertical size if unknown
+
+// Type/size-aware default head height for an opening shape.
+function defaultOpeningHeightFt(sh) {
+  if (sh && sh.type === "door") {
+    return sh.subtype === "garage" ? DEFAULT_GARAGE_HEIGHT_FT : DEFAULT_DOOR_HEIGHT_FT;
+  }
+  return DEFAULT_WINDOW_HEAD_FT;
+}
+
+// Effective head height: the user's override if set, else the standard default.
+function effectiveOpeningHeightFt(sh) {
+  return (sh && typeof sh.roughHeight === "number") ? sh.roughHeight : defaultOpeningHeightFt(sh);
+}
+
+// Vertical size of a window opening (sill-to-head), from its catalog height
+// when known, else a conservative fallback. Doors span floor-to-head.
+function windowOpeningSizeFt(sh) {
+  if (sh && typeof sh.winHeight === "number") return sh.winHeight;
+  return Math.min(DEFAULT_WINDOW_SIZE_FT, effectiveOpeningHeightFt(sh));
+}
+
 const ORDINALS = [
   "First", "Second", "Third", "Fourth", "Fifth",
   "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"
@@ -253,19 +280,21 @@ const PALETTE_ITEMS = {
     { name: 'Garage Door 16\'-0"',  subtype: "garage",  width: 16 },
     { name: 'Garage Door 18\'-0"',  subtype: "garage",  width: 18 },
   ],
+  // `height` is the window's vertical opening size (sill-to-head), used by the
+  // estimator for accurate opening area + below-window framing.
   windows: [
-    { name: 'Single Hung 2\'-0" × 3\'-0"', width: 2 },
-    { name: 'Single Hung 2\'-6" × 3\'-6"', width: 2.5 },
-    { name: 'Single Hung 3\'-0" × 4\'-0"', width: 3 },
-    { name: 'Double Hung 3\'-0" × 5\'-0"', width: 3 },
-    { name: 'Casement 2\'-0" × 4\'-0"',     width: 2 },
-    { name: 'Casement 2\'-6" × 4\'-0"',     width: 2.5 },
-    { name: 'Awning 3\'-0" × 1\'-6"',       width: 3 },
-    { name: 'Awning 4\'-0" × 2\'-0"',       width: 4 },
-    { name: 'Sliding 4\'-0" × 3\'-0"',      width: 4 },
-    { name: 'Sliding 6\'-0" × 4\'-0"',      width: 6 },
-    { name: 'Picture 4\'-0" × 4\'-0"',      width: 4 },
-    { name: 'Picture 6\'-0" × 5\'-0"',      width: 6 },
+    { name: 'Single Hung 2\'-0" × 3\'-0"', width: 2,   height: 3 },
+    { name: 'Single Hung 2\'-6" × 3\'-6"', width: 2.5, height: 3.5 },
+    { name: 'Single Hung 3\'-0" × 4\'-0"', width: 3,   height: 4 },
+    { name: 'Double Hung 3\'-0" × 5\'-0"', width: 3,   height: 5 },
+    { name: 'Casement 2\'-0" × 4\'-0"',     width: 2,   height: 4 },
+    { name: 'Casement 2\'-6" × 4\'-0"',     width: 2.5, height: 4 },
+    { name: 'Awning 3\'-0" × 1\'-6"',       width: 3,   height: 1.5 },
+    { name: 'Awning 4\'-0" × 2\'-0"',       width: 4,   height: 2 },
+    { name: 'Sliding 4\'-0" × 3\'-0"',      width: 4,   height: 3 },
+    { name: 'Sliding 6\'-0" × 4\'-0"',      width: 6,   height: 4 },
+    { name: 'Picture 4\'-0" × 4\'-0"',      width: 4,   height: 4 },
+    { name: 'Picture 6\'-0" × 5\'-0"',      width: 6,   height: 5 },
   ],
   // Kitchen appliances — width is along the wall, depth is into the room.
   // Standard residential dimensions (US) for plan-view symbols.
@@ -530,7 +559,9 @@ const dimWidthDec = document.getElementById("dim-width-dec");
 const dimWidthInc = document.getElementById("dim-width-inc");
 const dimWidthReadout = document.getElementById("dim-width-readout");
 const dimRoughRow = document.getElementById("dim-rough-row");
-const dimRoughHeightInput = document.getElementById("dim-rough-height");
+const dimHeightDec = document.getElementById("dim-height-dec");
+const dimHeightInc = document.getElementById("dim-height-inc");
+const dimHeightReadout = document.getElementById("dim-height-readout");
 const doorFlipRow = document.getElementById("door-flip-row");
 
 const colorPopupEl = document.getElementById("color-popup");

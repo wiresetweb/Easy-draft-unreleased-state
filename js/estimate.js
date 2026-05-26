@@ -97,17 +97,9 @@ function computeEstimateGaps(st) {
     }
   }
 
-  // Every door / window needs a rough-opening height to estimate.
-  forEachShape((sh, sub, story) => {
-    if ((sh.type === "door" || sh.type === "window") && sh.roughHeight == null) {
-      gaps.push({
-        type: "roughHeight",
-        storyId: story ? story.id : null,
-        shapeId: sh.id,
-        label: `${openingLabel(sh)}: rough-opening height not set`,
-      });
-    }
-  });
+  // Opening heights are prefilled with type/size-aware standards and are
+  // user-editable, so a missing height is no longer a gap (no guessing — the
+  // default is a documented standard, surfaced in the modal and the wizard).
 
   return gaps;
 }
@@ -249,12 +241,14 @@ function estimateStory(story, st, items) {
       const L = wallRunLength(w);
       if (L < 1e-6) continue;
       const faceArea = L * H;
-      // Subtract openings sitting on this wall (only those with a known height).
+      // Subtract openings sitting on this wall. Doors span floor-to-head;
+      // windows use their (sill-to-head) opening size so the wall below the
+      // sill still counts.
       let openArea = 0;
       for (const op of openingsForStory(story)) {
-        if (op.roughHeight != null && openingOnWall(op, w)) {
-          openArea += op.width * op.roughHeight;
-        }
+        if (!openingOnWall(op, w)) continue;
+        const oh = op.type === "window" ? windowOpeningSizeFt(op) : effectiveOpeningHeightFt(op);
+        openArea += op.width * oh;
       }
       const netFace = Math.max(0, faceArea - openArea);
 
@@ -299,11 +293,12 @@ function estimateStory(story, st, items) {
     const cripPerSide = Math.ceil(op.width / (cfg.crippleSpacingIn / 12));
     crippleStuds += cripPerSide + (op.type === "window" ? cripPerSide : 0);
     if (op.type === "window") sillLF += op.width;
-    // Casing needs the rough height; skip when unknown (opening already in gaps).
-    if (op.roughHeight != null) {
-      casingLF += op.type === "window"
-        ? 2 * (op.width + op.roughHeight)            // 4 sides
-        : op.width + 2 * op.roughHeight;             // 3 sides (head + 2 legs)
+    // Casing wraps the opening; heights are always available (prefilled).
+    if (op.type === "window") {
+      const wh = windowOpeningSizeFt(op);
+      casingLF += 2 * (op.width + wh);               // 4 sides
+    } else {
+      casingLF += op.width + 2 * effectiveOpeningHeightFt(op); // 3 sides (head + 2 legs)
     }
   }
 

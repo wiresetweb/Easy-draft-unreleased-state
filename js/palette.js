@@ -841,7 +841,11 @@ function placeItem(def, sectionKey, worldPos) {
       depth: DEFAULT_WINDOW_DEPTH_FT,
       angle,
       kind: def.name,
+      // Estimator: vertical opening size from the catalog + a prefilled,
+      // editable head height (floor to top of opening).
+      winHeight: def.height,
     };
+    shape.roughHeight = defaultOpeningHeightFt(shape);
   } else {
     shape = {
       id: makeId("X"),
@@ -853,6 +857,7 @@ function placeItem(def, sectionKey, worldPos) {
       subtype: def.subtype || "swing",
       kind: def.name,
     };
+    shape.roughHeight = defaultOpeningHeightFt(shape);
   }
 
   // Auto-cut any wall the opening lands on. The dialog we used to show
