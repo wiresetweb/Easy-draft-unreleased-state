@@ -79,6 +79,138 @@ function tourUpperFurnitureCount() {
   return sub ? sub.shapes.length : 0;
 }
 
+// ---------- Cabin layout guide ----------
+// The in-depth cabin tour previously let users draw any size cabin — and a
+// too-small one couldn't fit the cabinets / stairs the later steps require.
+// We now prescribe a fixed 20×20 ft footprint (a ghost outline they trace) and
+// derive exact cabinet / stair positions from it, so the demo can't fail on
+// the user's judgment. The rect is locked the first time it's needed (based on
+// the current view center) and reused for every later guide.
+const TOUR_CABIN_HALF_FT = 10; // half of a 20 ft side
+
+function tourCabinRect() {
+  if (tourSnapshot.cabinRect) return tourSnapshot.cabinRect;
+  let cx = 0, cy = 0;
+  try {
+    const v = viewSize();
+    const c = screenToWorld(v.w / 2, v.h / 2);
+    cx = Math.round(c.x);
+    cy = Math.round(c.y);
+  } catch (_) { /* fall back to origin */ }
+  const h = TOUR_CABIN_HALF_FT;
+  tourSnapshot.cabinRect = { x1: cx - h, y1: cy - h, x2: cx + h, y2: cy + h };
+  return tourSnapshot.cabinRect;
+}
+
+// Guide spec builders, all derived from the locked cabin rect so they line up
+// with the walls the user traced.
+function tourCabinGuide() {
+  const r = tourCabinRect();
+  return { kind: "rect", x1: r.x1, y1: r.y1, x2: r.x2, y2: r.y2,
+    label: "Trace your four walls around this outline (about 20 × 20 ft)" };
+}
+function tourCabinetGuide() {
+  const r = tourCabinRect();
+  // Along the top wall, inset from the corners.
+  return { kind: "run", x1: r.x1 + 2, y1: r.y1, x2: r.x2 - 2, y2: r.y1,
+    label: "Run your cabinets along this wall" };
+}
+function tourStairsGuide() {
+  const r = tourCabinRect();
+  // A right-to-left drag just inside the bottom wall, offset by half the stair
+  // width so the run lands flush against the wall and fits without turning.
+  const y = r.y2 - DEFAULT_STAIRS_WIDTH_FT / 2;
+  return { kind: "arrow", x1: r.x2 - 2, y1: y, x2: r.x1 + 2, y2: y,
+    label: "Drag the stairs along this wall" };
+}
+
+// Paint the active tour guide (ghost outline / cabinet run / stair arrow) on
+// the canvas. Called from render(); no-op unless a step set state.tourGuide.
+function drawTourGuide() {
+  const g = state.tourGuide;
+  if (!g) return;
+  const accent = "rgba(232, 96, 44, 0.9)";
+  ctx.save();
+  ctx.strokeStyle = accent;
+  ctx.fillStyle = accent;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (g.kind === "rect") {
+    const a = worldToScreen(g.x1, g.y1);
+    const b = worldToScreen(g.x2, g.y2);
+    ctx.setLineDash([8, 6]);
+    ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    ctx.setLineDash([]);
+    for (const [wx, wy] of [[g.x1, g.y1], [g.x2, g.y1], [g.x2, g.y2], [g.x1, g.y2]]) {
+      const p = worldToScreen(wx, wy);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    tourGuideLabel(g.label, worldToScreen((g.x1 + g.x2) / 2, (g.y1 + g.y2) / 2));
+  } else if (g.kind === "run") {
+    const a = worldToScreen(g.x1, g.y1);
+    const b = worldToScreen(g.x2, g.y2);
+    ctx.lineWidth = 6;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    tourGuideLabel(g.label, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  } else if (g.kind === "arrow") {
+    const a = worldToScreen(g.x1, g.y1);
+    const b = worldToScreen(g.x2, g.y2);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len, px = -uy, py = ux;
+    const hl = 14, hw = 7;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - ux * hl + px * hw, b.y - uy * hl + py * hw);
+    ctx.lineTo(b.x - ux * hl - px * hw, b.y - uy * hl - py * hw);
+    ctx.closePath();
+    ctx.fill();
+    tourGuideLabel(g.label, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  }
+  ctx.restore();
+}
+
+// A small pill label centered on a screen point, for guide annotations.
+function tourGuideLabel(text, at) {
+  if (!text) return;
+  ctx.save();
+  ctx.font = "600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  const padX = 7, padY = 4;
+  const w = ctx.measureText(text).width + padX * 2;
+  const h = 20;
+  const x = at.x - w / 2, y = at.y - h / 2;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+  ctx.strokeStyle = "rgba(232, 96, 44, 0.9)";
+  ctx.lineWidth = 1;
+  if (typeof ctx.roundRect === "function") {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 5);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+  }
+  ctx.fillStyle = "#1A2A36";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, at.x, at.y);
+  ctx.restore();
+}
+
 function tourSnapshotShapeMap(predicate, sigFn) {
   const m = new Map();
   forEachShape((sh) => { if (predicate(sh)) m.set(sh.id, sigFn(sh)); });
@@ -388,6 +520,9 @@ function cabinTourStepList() {
     enter: () => {
       tourEnsureLayerByName("Walls");
       if (typeof setTool === "function") setTool("line");
+      // Show the ghost footprint so every cabin comes out big enough (20×20)
+      // for the cabinets and stairs the later steps need.
+      state.tourGuide = tourCabinGuide();
       tourSnapshot.cabinWallCount = tourCountShapesOnLayerName("Walls");
     },
     advance: () => tourCountShapesOnLayerName("Walls") > (tourSnapshot.cabinWallCount || 0),
@@ -399,6 +534,7 @@ function cabinTourStepList() {
       title: "Let's build a cabin",
       copy: "We'll draw a small cabin together, start to finish — walls, a door and window, furniture, " +
             "a kitchen, then a second floor with stairs, and a printable sheet at the end. " +
+            "We'll show you a dashed outline to trace and point out exactly where things go. " +
             "Take it at your own pace; press Skip or Esc to leave any time.",
       manual: true,
       manualLabel: "Start building",
@@ -406,27 +542,28 @@ function cabinTourStepList() {
     },
     wallStep(
       "cabin-wall-1",
-      "Draw the first wall",
-      "Easy Draft draws walls with the Line tool — selected for you. Click once to start, " +
-        "move across, and click again to drop the bottom wall of your cabin. The cursor snaps " +
-        "to the grid so the length lands clean.",
+      "Trace the first wall",
+      "See the dashed square on the canvas? That's your cabin's footprint — a roomy 20 × 20 ft. " +
+        "The Line tool is ready. Click one corner of the outline, then click the next corner along an " +
+        "edge to drop your first wall. The cursor snaps to the grid so it lands clean.",
       () => document.querySelector('.tool[data-tool="line"]'),
     ),
     wallStep(
       "cabin-wall-2",
-      "Now the right wall",
-      "From the end of that first wall, click upward to draw the right side. Connect it to the " +
-        "corner you just finished so the cabin starts to take shape.",
+      "Trace the second wall",
+      "Keep going around the dashed outline: click from the corner you just reached to the next one " +
+        "to drop the second wall.",
     ),
     wallStep(
       "cabin-wall-3",
-      "Add the back wall",
-      "Run a wall across the top, parallel to your first one. Three sides down — one to go.",
+      "Trace the third wall",
+      "One more edge of the outline — click corner to corner along the third side. Three down, one to go.",
     ),
     wallStep(
       "cabin-wall-4",
       "Close the cabin",
-      "Drop the last wall down the left side to close the rectangle. That's your cabin's footprint.",
+      "Trace the last edge to close the square. That's your cabin's footprint, sized to fit everything " +
+        "we're about to add.",
     ),
     {
       id: "cabin-select-wall",
@@ -558,11 +695,14 @@ function cabinTourStepList() {
     {
       id: "cabin-cabinet",
       title: "Build a run of cabinets",
-      copy: "Click 'Cabinet builder' in the kitchen panel. Then click along a wall to drop the run's corners — " +
-            "one click per corner — and hit 'Finish' when you're done. Easy Draft keeps the counter flush to the wall.",
+      copy: "Click 'Cabinet builder' in the kitchen panel. Then run the cabinets along the highlighted wall: " +
+            "click its two ends (one click per corner) and hit 'Finish'. Easy Draft keeps the counter flush to the wall.",
       anchor: () => document.querySelector('[data-palette-tool="cabinet-builder"]')
         || document.getElementById("palette-panel"),
-      enter: () => { tourSnapshot.cabinetCount = tourCountShapesByType("cabinet"); },
+      enter: () => {
+        state.tourGuide = tourCabinetGuide();
+        tourSnapshot.cabinetCount = tourCountShapesByType("cabinet");
+      },
       advance: () => tourCountShapesByType("cabinet") > (tourSnapshot.cabinetCount || 0),
     },
     {
@@ -602,9 +742,9 @@ function cabinTourStepList() {
     {
       id: "cabin-stairs",
       title: "Run stairs upstairs",
-      copy: "Connect the floors with stairs. Pick the Stairs tool on the left toolbar, then drag along the longest " +
-            "open span of your cabin (so the run has room to fit) and click 'Build' in the dialog. The stairs land " +
-            "on a Stairs layer and automatically show on the floor above with a 'DN' label.",
+      copy: "Connect the floors with stairs. Pick the Stairs tool on the left toolbar, then drag along the " +
+            "highlighted arrow — right to left, just inside the bottom wall — and click 'Build' in the dialog. " +
+            "The stairs hug the wall and automatically show on the floor above with a 'DN' label.",
       anchor: () => document.querySelector('.tool[data-tool="stairs"]'),
       enter: () => {
         // Stairs route to the active story's Stairs layer, and the Stairs tool
@@ -619,6 +759,7 @@ function cabinTourStepList() {
           if (typeof renderLayerTree === "function") renderLayerTree();
           if (typeof updatePaletteVisibility === "function") updatePaletteVisibility();
         }
+        state.tourGuide = tourStairsGuide();
         tourSnapshot.stairCount = tourCountShapesByType("stairs");
       },
       advance: () => tourCountShapesByType("stairs") > (tourSnapshot.stairCount || 0),
@@ -795,8 +936,10 @@ function endTour(completed) {
   if (tourState.backdropEl && tourState.backdropEl.parentNode) tourState.backdropEl.parentNode.removeChild(tourState.backdropEl);
   if (tourState.targetEl) tourState.targetEl.classList.remove("tour-target");
   tourState = null;
+  state.tourGuide = null;
   document.body.classList.remove("tour-running");
   document.removeEventListener("keydown", onTourKeydown, true);
+  render();
   if (completed) {
     try { localStorage.setItem(TOUR_STORAGE_KEY, "true"); } catch (_) { /* private mode, etc */ }
   }
@@ -816,11 +959,17 @@ function enterStep(idx) {
   if (!tourState) return;
   tourState.stepIndex = idx;
   const step = tourState.steps[idx];
+  // Clear any canvas guide from the previous step; the new step's enter() sets
+  // its own if it wants one.
+  state.tourGuide = null;
   if (typeof step.enter === "function") {
     try { step.enter(); } catch (e) { console.warn("[tour] enter() threw:", e); }
   }
   paintTourCard(step);
   paintTourTarget(step);
+  // Repaint the canvas so the step's guide overlay (or its removal) shows
+  // immediately rather than waiting for the next pointer event.
+  if (typeof render === "function") render();
 }
 
 function startTourTick() {

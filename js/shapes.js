@@ -202,17 +202,18 @@ function bboxStairs(sh) {
       xs.push(seg.x1 + p.x * halfW, seg.x1 - p.x * halfW, seg.x2 + p.x * halfW, seg.x2 - p.x * halfW);
       ys.push(seg.y1 + p.y * halfW, seg.y1 - p.y * halfW, seg.y2 + p.y * halfW, seg.y2 - p.y * halfW);
     } else if (seg.type === "landing") {
+      const halfU = (seg.lengthU != null ? seg.lengthU : seg.width) / 2;
       xs.push(
-        seg.x - u.x * halfW + p.x * halfW,
-        seg.x - u.x * halfW - p.x * halfW,
-        seg.x + u.x * halfW - p.x * halfW,
-        seg.x + u.x * halfW + p.x * halfW,
+        seg.x - u.x * halfU + p.x * halfW,
+        seg.x - u.x * halfU - p.x * halfW,
+        seg.x + u.x * halfU - p.x * halfW,
+        seg.x + u.x * halfU + p.x * halfW,
       );
       ys.push(
-        seg.y - u.y * halfW + p.y * halfW,
-        seg.y - u.y * halfW - p.y * halfW,
-        seg.y + u.y * halfW - p.y * halfW,
-        seg.y + u.y * halfW + p.y * halfW,
+        seg.y - u.y * halfU + p.y * halfW,
+        seg.y - u.y * halfU - p.y * halfW,
+        seg.y + u.y * halfU - p.y * halfW,
+        seg.y + u.y * halfU + p.y * halfW,
       );
     }
   }
@@ -240,10 +241,11 @@ function stairsSnapCorners(sh) {
       out.push({ x: seg.x2 - p.x * halfW, y: seg.y2 - p.y * halfW });
     } else if (seg.type === "landing") {
       const half = seg.width / 2;
-      out.push({ x: seg.x - u.x * half + p.x * half, y: seg.y - u.y * half + p.y * half });
-      out.push({ x: seg.x - u.x * half - p.x * half, y: seg.y - u.y * half - p.y * half });
-      out.push({ x: seg.x + u.x * half - p.x * half, y: seg.y + u.y * half - p.y * half });
-      out.push({ x: seg.x + u.x * half + p.x * half, y: seg.y + u.y * half + p.y * half });
+      const halfU = (seg.lengthU != null ? seg.lengthU : seg.width) / 2;
+      out.push({ x: seg.x - u.x * halfU + p.x * half, y: seg.y - u.y * halfU + p.y * half });
+      out.push({ x: seg.x - u.x * halfU - p.x * half, y: seg.y - u.y * halfU - p.y * half });
+      out.push({ x: seg.x + u.x * halfU - p.x * half, y: seg.y + u.y * halfU - p.y * half });
+      out.push({ x: seg.x + u.x * halfU + p.x * half, y: seg.y + u.y * halfU + p.y * half });
     }
   }
   return out;

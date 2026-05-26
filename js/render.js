@@ -471,6 +471,7 @@ function render() {
   drawSelectedShapeGlow();
   drawAllShapes();
   drawStairsStoryLinks();
+  if (typeof drawTourGuide === "function") drawTourGuide();
   drawSelection();
   drawCurveHandle();
   drawMarquee();
