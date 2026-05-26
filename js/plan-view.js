@@ -985,7 +985,7 @@ function visibleShapesBBox(sheet) {
 
 // Title block: vertical strip on the right side of the border box. With
 // notes, it shrinks to a bottom band; without notes it's full-height.
-//   1. Drafting Studio brand block (the "designer/firm" section)
+//   1. Easy Draft brand block (the "designer/firm" section)
 //   2. Project info (project name + address)
 //   3. Sheet info (title, scale, date, drawn-by)
 //   4. Sheet number — large, bottom
@@ -1076,7 +1076,7 @@ function drawTitleBlockSection(kind, sheet, x, y, w, h, ppi) {
 
     ctx.fillStyle = "#1A2A36";
     ctx.font = `700 ${Math.round(0.11 * ppi)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-    ctx.fillText("DRAFTING STUDIO", cx, y + h * 0.72);
+    ctx.fillText("EASY DRAFT", cx, y + h * 0.72);
 
     ctx.fillStyle = "#4A6274";
     ctx.font = `${Math.round(0.07 * ppi)}px system-ui, -apple-system, "Segoe UI", sans-serif`;

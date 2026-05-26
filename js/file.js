@@ -31,7 +31,7 @@ function isFsCancelError(err) {
 
 function fileTypesFilter() {
   return [{
-    description: "Drafting Studio drawing",
+    description: "Easy Draft drawing",
     accept: { "application/json": [FILE_EXT, ".json"] },
   }];
 }
@@ -47,6 +47,7 @@ function serializeDocument() {
     stories: state.stories.map((s) => ({
       id: s.id,
       name: s.name,
+      level: s.level,
       visible: s.visible,
       expanded: s.expanded,
       sublayers: s.sublayers.map((l) => ({
@@ -75,14 +76,15 @@ function serializeDocument() {
 
 function loadDocument(data) {
   if (!data || typeof data !== "object" || !Array.isArray(data.stories)) {
-    appAlert("That file doesn't look like a Drafting Studio drawing.", { title: "Couldn't open file" });
+    appAlert("That file doesn't look like an Easy Draft drawing.", { title: "Couldn't open file" });
     return false;
   }
   // Rehydrate stories with defensive defaults so older / hand-edited files
   // don't crash the renderer if a field is missing.
-  state.stories = data.stories.map((s) => ({
+  state.stories = data.stories.map((s, i) => ({
     id: s.id || makeId("S"),
     name: s.name || "Story",
+    level: typeof s.level === "number" ? s.level : i,
     visible: s.visible !== false,
     expanded: s.expanded !== false,
     sublayers: (s.sublayers || []).map((l) => ({
@@ -169,13 +171,10 @@ function loadDocument(data) {
 
 // ---------- File operations ----------
 
-async function fileNew() {
-  const ok = await appConfirm("Start a new drawing?\n\nUnsaved changes will be lost.", {
-    title: "New drawing",
-    confirmLabel: "Start new",
-    danger: true,
-  });
-  if (!ok) return;
+// Wipe the current drawing back to a single fresh story. No confirmation —
+// callers that need one (fileNew) prompt first. Exposed so other flows (e.g.
+// starting the guided tour) can hand the user a clean canvas.
+function resetDocument() {
   state.stories.length = 0;
   state.activeSublayerId = null;
   state.history.length = 0;
@@ -202,6 +201,16 @@ async function fileNew() {
   updatePaletteVisibility();
   render();
   updateFileLabel();
+}
+
+async function fileNew() {
+  const ok = await appConfirm("Start a new drawing?\n\nUnsaved changes will be lost.", {
+    title: "New drawing",
+    confirmLabel: "Start new",
+    danger: true,
+  });
+  if (!ok) return;
+  resetDocument();
 }
 
 async function fileOpen() {
@@ -268,9 +277,11 @@ async function fileSave() {
     state.fileName = state.fileHandle.name;
     updateFileLabel();
     if (typeof logUserAction === "function") logUserAction(`Saved ${state.fileName}`);
+    return true;
   } catch (err) {
     console.error(err);
     appAlert("Couldn't save: " + (err.message || err), { title: "Couldn't save" });
+    return false;
   }
 }
 
@@ -290,13 +301,14 @@ async function fileSaveAs() {
       state.fileName = handle.name;
       updateFileLabel();
       if (typeof logUserAction === "function") logUserAction(`Saved as ${state.fileName}`);
+      return true;
     } catch (err) {
       if (!isFsCancelError(err)) {
         console.error(err);
         appAlert("Couldn't save: " + (err.message || err), { title: "Couldn't save" });
       }
+      return false;
     }
-    return;
   }
 
   // Fallback: trigger a download via blob URL.
@@ -310,6 +322,7 @@ async function fileSaveAs() {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   if (typeof logUserAction === "function") logUserAction(`Downloaded ${a.download}`);
+  return true;
 }
 
 // ---------- Export ----------

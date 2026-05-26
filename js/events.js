@@ -233,9 +233,26 @@ function bindEvents() {
     }
   });
 
-  addStoryBtn.addEventListener("click", () => {
+  addStoryBtn.addEventListener("click", async () => {
+    // Ask whether the new story is a basement or an upper floor. Skip the
+    // question once a basement exists (only one is allowed) or when seeding
+    // the very first story.
+    let kind = "upper";
+    if (state.stories.length > 0 && !storyHasBasement()) {
+      const choice = await appChoice(
+        "Is the new story a basement (below the ground floor) or an upper floor (above it)?",
+        [
+          { label: "Basement", value: "basement" },
+          { label: "Upper floor", value: "upper", primary: true },
+          { label: "Cancel", value: null, cancel: true },
+        ],
+        { title: "Add a story" },
+      );
+      if (!choice) return;
+      kind = choice;
+    }
     pushHistory("Added story");
-    addStory();
+    addStory(kind);
     renderLayerTree();
     renderSheetLayerTree();
     render();

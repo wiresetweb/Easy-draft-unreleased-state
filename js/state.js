@@ -54,6 +54,7 @@ const DEFAULT_LAYER_COLORS = {
   "Floor":           "#92400e",
   "Walls":           "#1a1a1a",
   "Windows & Doors": "#2d4ee0",
+  "Stairs":          "#b45309",
   "Kitchen":         "#0d9488",
   "Bathroom":        "#0ea5e9",
   "Furniture":       "#7c3aed",
@@ -98,6 +99,11 @@ const DEFAULT_STAIRS_CEILING_FT = 8;
 const DEFAULT_STAIRS_RISE_FT = 7 / 12;  // 7"
 const DEFAULT_STAIRS_RUN_FT = 11 / 12;  // 11"
 const DEFAULT_STAIRS_WIDTH_FT = 3;
+// Spiral staircase defaults
+const DEFAULT_SPIRAL_DIAMETER_FT = 5;   // 60" — a comfortable residential spiral
+const DEFAULT_SPIRAL_STORIES_UP = 1;
+const DEFAULT_SPIRAL_STORIES_DOWN = 0;
+const SPIRAL_MAX_STORIES = 10;
 
 // Cabinet builder defaults
 const DEFAULT_CABINET_DEPTH_FT = 2; // 24" — standard base cabinet
@@ -110,13 +116,14 @@ const ORDINALS = [
 // they actually need a catch-all bucket. Furniture replaces it as a default
 // since most plans need furniture before they need an "Other".
 const DEFAULT_SUBLAYERS_FIRST = [
-  "Floor", "Walls", "Windows & Doors", "Kitchen", "Bathroom", "Furniture", "Measurements"
+  "Floor", "Walls", "Windows & Doors", "Stairs", "Kitchen", "Bathroom", "Furniture", "Measurements"
 ];
 const DEFAULT_SUBLAYERS_OTHER = [
-  "Floor", "Walls", "Windows & Doors", "Bathroom", "Furniture", "Measurements"
+  "Floor", "Walls", "Windows & Doors", "Stairs", "Bathroom", "Furniture", "Measurements"
 ];
 
 const MEASUREMENTS_LAYER_NAME = "Measurements";
+const STAIRS_LAYER_NAME = "Stairs";
 
 // Standard residential doors / windows (US, plan-view symbol)
 const PALETTE_ITEMS = {
@@ -432,6 +439,9 @@ const stairsRunInput = document.getElementById("stairs-run");
 const stairsWidthInput = document.getElementById("stairs-width");
 const stairsCancelBtn = document.getElementById("stairs-cancel");
 const stairsBuildBtn = document.getElementById("stairs-build");
+const stairsHugWallInput = document.getElementById("stairs-hug-wall");
+const stairsSpiralUpInput = document.getElementById("stairs-spiral-up");
+const stairsSpiralDownInput = document.getElementById("stairs-spiral-down");
 
 const layerHintModal = document.getElementById("layer-hint-modal");
 const layerHintList = document.getElementById("layer-hint-list");

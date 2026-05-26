@@ -176,6 +176,8 @@ function applyWallThickness(t) {
     if (t > 0) sh.thickness = t;
     else delete sh.thickness;
   }
+  // Stairs that hug one of these walls slide out to stay flush with the new face.
+  if (typeof reflowStairsForWalls === "function") reflowStairsForWalls(targets);
   render();
 }
 
