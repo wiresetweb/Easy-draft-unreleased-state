@@ -528,6 +528,55 @@ function drawIndexTable(sheet, vp, ppi) {
   drawTableContent(sheet, vp, ppi, collectIndexData(sheet));
 }
 
+// Shared table-layout constants — used by both the renderer and the estimate
+// paginator, so wrapped-row heights agree across the two and content never
+// truncates unexpectedly.
+const TBL_LINE_MULT = 1.45;     // line height = cell font px × this
+const TBL_ROW_PAD_MULT = 0.55;  // extra vertical padding per row, × cell font px
+const TBL_SECT_GAP_IN = 0.30;   // gap below each section
+
+// Relative column widths by header name. Long-text columns (Basis, Convention,
+// Item, Title) get the lion's share; numeric / unit columns stay narrow.
+function columnWeights(cols) {
+  return cols.map((c) => {
+    if (/^#$/.test(c)) return 0.3;
+    if (/qty/i.test(c)) return 0.5;
+    if (/unit/i.test(c)) return 0.6;
+    if (/mark|sheet/i.test(c)) return 0.6;
+    if (/width|scale/i.test(c)) return 0.8;
+    if (/story|setting/i.test(c)) return 1.1;
+    if (/basis|notes|convention|value|item|type|title/i.test(c)) return 2.6;
+    return 1.4;
+  });
+}
+
+// Word-wrap `text` to fit `maxWidth` at the current ctx font, returning the
+// line array. Hard-breaks a single word that's wider than the column.
+function wrapToWidth(text, maxWidth) {
+  if (maxWidth <= 0) return [text];
+  if (ctx.measureText(text).width <= maxWidth) return [text];
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let cur = "";
+  const pushHardBroken = (w) => {
+    let chunk = "";
+    for (const ch of w) {
+      if (chunk && ctx.measureText(chunk + ch).width > maxWidth) { lines.push(chunk); chunk = ch; }
+      else chunk += ch;
+    }
+    return chunk;
+  };
+  for (const w of words) {
+    const test = cur ? cur + " " + w : w;
+    if (ctx.measureText(test).width <= maxWidth) { cur = test; continue; }
+    if (cur) { lines.push(cur); cur = ""; }
+    if (ctx.measureText(w).width > maxWidth) cur = pushHardBroken(w);
+    else cur = w;
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [""];
+}
+
 // Render a stack of titled tables filling the viewport area. Lays out
 // columns with weighted widths so longer text columns ("Title", "Type")
 // get the most room. Truncates with ellipsis if a cell would otherwise
@@ -585,12 +634,7 @@ function drawTableContent(sheet, vp, ppi, sections) {
     // Column widths weighted so wider columns get more room; the last
     // numeric column ("Qty") is fixed-narrow.
     const cols = section.columns;
-    const weights = cols.map((c) => {
-      if (/qty/i.test(c)) return 0.6;
-      if (/mark|sheet/i.test(c)) return 0.7;
-      if (/width|scale/i.test(c)) return 0.9;
-      return 1.6;
-    });
+    const weights = columnWeights(cols);
     const totalW = weights.reduce((a, b) => a + b, 0);
     const colWs = weights.map((w) => (w / totalW) * tableW);
     const colXs = [];
@@ -613,14 +657,21 @@ function drawTableContent(sheet, vp, ppi, sections) {
     ctx.stroke();
     cursorY += hdrCellPx * 0.4;
 
-    // Data rows
+    // Data rows — cells wrap to as many lines as they need so long notes
+    // (Basis, Conventions) are never truncated.
     const cellPx = Math.round(0.115 * ppi * scale);
-    const rowH = cellPx * 1.9;
+    const lineH = Math.round(cellPx * TBL_LINE_MULT);
+    const rowPad = Math.round(cellPx * TBL_ROW_PAD_MULT);
     ctx.fillStyle = "#1A2A36";
     ctx.font = `${cellPx}px system-ui, -apple-system, "Segoe UI", sans-serif`;
     for (const row of section.rows) {
-      if (cursorY + rowH > bottomY) {
-        // Out of room — drop a "+N more" line and stop.
+      const wrapped = row.map((cell, c) => wrapToWidth(String(cell), colWs[c] - 8));
+      const lineCount = Math.max(1, ...wrapped.map((w) => w.length));
+      const rowH = lineCount * lineH + rowPad;
+      if (cursorY + rowH > bottomY && cursorY > vp.y + padY) {
+        // Out of room on this single-page table — fall back to "+N more".
+        // (The estimate sheet pre-paginates, so this only fires for the
+        // schedule / index sheets, which rarely overflow.)
         const moreCount = section.rows.length - section.rows.indexOf(row);
         ctx.fillStyle = "#4A6274";
         ctx.font = `italic ${cellPx}px system-ui, -apple-system, "Segoe UI", sans-serif`;
@@ -629,10 +680,10 @@ function drawTableContent(sheet, vp, ppi, sections) {
         break;
       }
       for (let c = 0; c < row.length; c++) {
-        const text = truncateToWidth(String(row[c]), colWs[c] - 8);
-        ctx.fillText(text, colXs[c] + 4, cursorY + cellPx * 0.45);
+        for (let li = 0; li < wrapped[c].length; li++) {
+          ctx.fillText(wrapped[c][li], colXs[c] + 4, cursorY + li * lineH + cellPx * 0.85);
+        }
       }
-      // Row separator
       ctx.strokeStyle = "rgba(26, 42, 54, 0.10)";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -642,7 +693,7 @@ function drawTableContent(sheet, vp, ppi, sections) {
       cursorY += rowH;
     }
 
-    cursorY += 0.30 * ppi; // gap between sections
+    cursorY += TBL_SECT_GAP_IN * ppi; // gap between sections
   }
 
   ctx.restore();

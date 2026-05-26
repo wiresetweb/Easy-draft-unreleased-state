@@ -134,64 +134,98 @@ function drawEstimateSheet(sheet, vp, ppi) {
 
 // ---------- Auto-pagination ----------
 // drawTableContent lays content out top-down with these per-block heights
-// (expressed as fractions of ppi × text-scale). We mirror them in inches —
-// ppi cancels — so we can split the section list into pages without touching
-// the canvas. Keep these in lock-step with drawTableContent().
+// (fractions of ppi × text-scale). We mirror them in inches — ppi cancels — so
+// we can split the section list into pages without touching the canvas. Row
+// heights are measured (cells wrap), using the same column widths / wrap logic
+// as the renderer. Keep in lock-step with drawTableContent().
+const EST_REF_PPI = 100;
 const EST_TITLE_IN = (s) => 0.22 * s + 0.20;   // big sheet title + underline gap
 const EST_SECT_IN  = (s) => 0.14 * s * 1.5;    // section header
 const EST_EMPTY_IN = (s) => 0.10 * s * 2;      // "no rows" line
 const EST_COLHDR_IN = (s) => 0.085 * s * 1.8;  // column header + rule
-const EST_ROW_IN   = (s) => 0.115 * s * 1.9;   // one data row
 const EST_SAFETY_IN = 0.2;                      // conservative slack vs rounding
+const EST_LINE_IN = (s) => 0.115 * s * TBL_LINE_MULT;   // one wrapped line
+const EST_ROWPAD_IN = (s) => 0.115 * s * TBL_ROW_PAD_MULT;
 
-// Usable section height (inches) on one page of this sheet, mirroring the
-// viewport math in renderPlanView (vp.h = paperH − margins − 0.25 − 0.9) minus
-// the top/bottom padding and the repeated title.
+// Drawable viewport size (inches), mirroring renderPlanView's vp computation.
+function estimateViewportInches(sheet) {
+  const dim = paperDimensionsIn(sheet);
+  const bw = dim.w - (SHEET_MARGIN_IN.left + SHEET_MARGIN_IN.right);
+  const tbW = Math.min(TITLE_BLOCK_WIDTH_IN, bw * 0.4);
+  const w = bw - tbW - 0.25 - 0.25;
+  const h = dim.h - (SHEET_MARGIN_IN.top + SHEET_MARGIN_IN.bottom) - 0.25 - 0.9;
+  return { w, h };
+}
+
 function estimateContentBudgetIn(sheet) {
-  const paperH = paperDimensionsIn(sheet).h;
   const scale = sheetTextScale(sheet);
-  const vpH = paperH - (SHEET_MARGIN_IN.top + SHEET_MARGIN_IN.bottom) - 0.25 - 0.9;
-  return Math.max(1, vpH - 0.5 - EST_TITLE_IN(scale) - EST_SAFETY_IN);
+  const vp = estimateViewportInches(sheet);
+  return Math.max(1, vp.h - 0.5 - EST_TITLE_IN(scale) - EST_SAFETY_IN);
+}
+
+// Column widths (inches) for a section's columns on this sheet — same weighting
+// the renderer uses.
+function estimateColWidthsIn(columns, sheet) {
+  const tableW = estimateViewportInches(sheet).w - 0.6; // minus 2× padX (0.30)
+  const weights = columnWeights(columns);
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
+  return weights.map((w) => (w / total) * tableW);
+}
+
+// Measured height (inches) of one data row: max wrapped line count across its
+// cells, using ctx.measureText at a reference ppi (line count is ppi-invariant).
+function estimateRowHeightIn(row, colWsIn, scale) {
+  const cellPx = Math.round(0.115 * EST_REF_PPI * scale);
+  ctx.save();
+  ctx.font = `${cellPx}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  let lines = 1;
+  for (let c = 0; c < row.length; c++) {
+    const w = wrapToWidth(String(row[c]), colWsIn[c] * EST_REF_PPI - 8);
+    if (w.length > lines) lines = w.length;
+  }
+  ctx.restore();
+  return lines * EST_LINE_IN(scale) + EST_ROWPAD_IN(scale);
 }
 
 // Split sections into pages, each a section-list shaped for drawTableContent.
 // A section that overflows continues on the next page with a repeated header.
-function paginateEstimateSections(sections, budgetIn, scale) {
-  const SECT = EST_SECT_IN(scale), EMPTY = EST_EMPTY_IN(scale);
-  const COLHDR = EST_COLHDR_IN(scale), ROW = EST_ROW_IN(scale);
+function paginateEstimateSections(sections, sheet) {
+  const scale = sheetTextScale(sheet);
+  const budget = estimateContentBudgetIn(sheet);
+  const SECT = EST_SECT_IN(scale), EMPTY = EST_EMPTY_IN(scale), COLHDR = EST_COLHDR_IN(scale);
   const pages = [];
   let cur = [], used = 0;
   const flush = () => { if (cur.length) { pages.push(cur); cur = []; used = 0; } };
 
   for (const sec of sections) {
-    const opener = SECT + (sec.rows.length ? COLHDR + ROW : EMPTY);
-    if (used > 0 && used + opener > budgetIn) flush();
+    const colWsIn = estimateColWidthsIn(sec.columns, sheet);
+    const firstRowH = sec.rows.length ? estimateRowHeightIn(sec.rows[0], colWsIn, scale) : 0;
+    const opener = SECT + (sec.rows.length ? COLHDR + firstRowH : EMPTY);
+    if (used > 0 && used + opener > budget) flush();
     let part = { title: sec.title, columns: sec.columns, rows: [], empty: sec.empty };
     cur.push(part);
     used += SECT + (sec.rows.length ? COLHDR : EMPTY);
     for (const row of sec.rows) {
-      // Break only once the current part already holds a row, so a single huge
-      // row can't loop forever.
-      if (used + ROW > budgetIn && part.rows.length > 0) {
+      const h = estimateRowHeightIn(row, colWsIn, scale);
+      // Break only once the current part holds a row, so a single tall row
+      // can't loop forever.
+      if (used + h > budget && part.rows.length > 0) {
         flush();
         part = { title: sec.title + " (cont.)", columns: sec.columns, rows: [], empty: sec.empty };
         cur.push(part);
         used += SECT + COLHDR;
       }
       part.rows.push(row);
-      used += ROW;
+      used += h;
     }
+    used += TBL_SECT_GAP_IN;
   }
   flush();
   return pages.length ? pages : [[]];
 }
 
 function paginateEstimate(est, sheet) {
-  return paginateEstimateSections(
-    buildEstimateSections(est),
-    estimateContentBudgetIn(sheet),
-    sheetTextScale(sheet),
-  );
+  return paginateEstimateSections(buildEstimateSections(est), sheet);
 }
 
 // How many pages the current estimate needs on the given (primary) sheet.
