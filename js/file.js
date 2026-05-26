@@ -343,8 +343,27 @@ async function fileSaveAs() {
 // Writes every estimate line item (and the Class-A gaps) to a CSV. Mirrors the
 // PDF-export entry points (File menu + Plan-mode sidebar). Quantities only —
 // the same numbers the Estimate sheet shows.
+// Upgrade prompt shown when a non-entitled visitor reaches for the estimator.
+// Client-side gating is intentionally bypassable (same philosophy as the
+// export watermark) — this is a nudge, not a hard server-enforced lock.
+async function promptEstimatorUpgrade() {
+  const choice = await appChoice(
+    "The Materials Estimator is a paid add-on. Unlock the Estimate sheet and CSV export with the Estimator + Engineering bundle.",
+    [
+      { label: "Cancel", value: "cancel", cancel: true },
+      { label: "Learn more", value: "buy", primary: true },
+    ],
+    { title: "Estimator add-on" },
+  );
+  if (choice === "buy") {
+    const url = (typeof CHECKOUT_URL === "string" && CHECKOUT_URL) ? CHECKOUT_URL : "#";
+    if (url !== "#") window.open(url, "_blank", "noopener");
+  }
+}
+
 function exportEstimateCsv() {
   if (typeof computeEstimate !== "function") return;
+  if (!state.hasEstimatorEngineer) { promptEstimatorUpgrade(); return; }
   const est = computeEstimate(state);
   const esc = (v) => {
     const s = String(v == null ? "" : v);

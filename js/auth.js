@@ -98,22 +98,27 @@ async function checkEntitlement(sb) {
     const session = sessionRes && sessionRes.data && sessionRes.data.session;
     if (!session || !session.user) return; // anonymous visitor → watermark
 
+    // One query covers every product we gate on: 'base' (clean exports) and
+    // 'estimator-engineer' (the bundled Materials Estimator + Engineering Tool
+    // add-on). Each active row flips its corresponding flag.
     const { data, error } = await sb
       .from("entitlements")
-      .select("status")
+      .select("product_id, status")
       .eq("user_id", session.user.id)
-      .eq("product_id", "base")
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
+      .in("product_id", ["base", "estimator-engineer"])
+      .eq("status", "active");
 
     if (error) {
       console.warn("[easy-draft] entitlement query error:", error.message || error);
       return;
     }
-    if (data && data.status === "active") {
+    const active = new Set((data || []).filter((r) => r.status === "active").map((r) => r.product_id));
+    if (active.has("base")) {
       state.paid = true;
       updatePlanBadge();
+    }
+    if (active.has("estimator-engineer")) {
+      state.hasEstimatorEngineer = true;
     }
   } catch (err) {
     console.warn("[easy-draft] entitlement check failed:", err);

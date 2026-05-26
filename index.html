@@ -548,6 +548,20 @@
           <span><strong>Metric</strong> &mdash; millimeters / meters (e.g. 1067 mm)</span>
         </label>
       </div>
+      <div class="settings-section">
+        <div class="settings-section-title">Materials Estimate</div>
+        <p class="settings-section-hint">Standard quantities the estimate is built from (Class B). Saved with the drawing and printed on the Estimate sheet so the basis is auditable.</p>
+        <div class="settings-grid">
+          <label>Stud spacing <select id="est-stud-spacing"></select></label>
+          <label>Cripple spacing <select id="est-cripple-spacing"></select></label>
+          <label>Plates per wall <input type="number" id="est-plates" min="1" max="4" step="1" /></label>
+          <label>Header plies <input type="number" id="est-header-ply" min="1" max="4" step="1" /></label>
+          <label>Framing waste % <input type="number" id="est-waste-framing" min="0" max="50" step="1" /></label>
+          <label>Drywall waste % <input type="number" id="est-waste-drywall" min="0" max="50" step="1" /></label>
+          <label>Sheathing waste % <input type="number" id="est-waste-sheathing" min="0" max="50" step="1" /></label>
+          <label>Insulation waste % <input type="number" id="est-waste-insulation" min="0" max="50" step="1" /></label>
+        </div>
+      </div>
     </div>
   </div>
 

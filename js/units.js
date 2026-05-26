@@ -116,6 +116,7 @@ function showSettingsModal() {
   // Sync the radios to the live setting before showing.
   const radios = modal.querySelectorAll('input[name="settings-units"]');
   for (const r of radios) r.checked = (r.value === state.units);
+  syncEstimateSettingsUI();
   modal.classList.remove("hidden");
   // Trap Tab inside the dialog window, not the .settings-modal backdrop —
   // the backdrop's only interactive child is the window anyway, but the
@@ -129,6 +130,59 @@ function hideSettingsModal() {
   if (!modal) return;
   modal.classList.add("hidden");
   releaseFocusTrap();
+}
+
+// ---------- Materials Estimate (Class-B) settings editor ----------
+function syncEstimateSettingsUI() {
+  const s = state.estimateSettings;
+  if (!s) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set("est-stud-spacing", String(s.studSpacingIn));
+  set("est-cripple-spacing", String(s.crippleSpacingIn));
+  set("est-plates", String(s.platesPerWall));
+  set("est-header-ply", String(s.headerPly));
+  set("est-waste-framing", String(Math.round((s.wastePct.framing || 0) * 100)));
+  set("est-waste-drywall", String(Math.round((s.wastePct.drywall || 0) * 100)));
+  set("est-waste-sheathing", String(Math.round((s.wastePct.sheathing || 0) * 100)));
+  set("est-waste-insulation", String(Math.round((s.wastePct.insulation || 0) * 100)));
+}
+
+function bindEstimateSettingsInputs() {
+  // Populate the spacing dropdowns once from the shared FRAMING_SPACINGS_IN list.
+  for (const id of ["est-stud-spacing", "est-cripple-spacing"]) {
+    const sel = document.getElementById(id);
+    if (sel && !sel.options.length) {
+      for (const sp of FRAMING_SPACINGS_IN) {
+        const o = document.createElement("option");
+        o.value = String(sp); o.textContent = sp + '" o.c.';
+        sel.appendChild(o);
+      }
+    }
+  }
+  const num = (id, fallback) => {
+    const el = document.getElementById(id);
+    const v = el ? parseFloat(el.value) : NaN;
+    return isNaN(v) ? fallback : v;
+  };
+  const onChange = () => {
+    const s = state.estimateSettings;
+    if (!s) return;
+    s.studSpacingIn = num("est-stud-spacing", s.studSpacingIn);
+    s.crippleSpacingIn = num("est-cripple-spacing", s.crippleSpacingIn);
+    s.platesPerWall = Math.max(1, Math.round(num("est-plates", s.platesPerWall)));
+    s.headerPly = Math.max(1, Math.round(num("est-header-ply", s.headerPly)));
+    s.wastePct.framing = Math.max(0, num("est-waste-framing", s.wastePct.framing * 100) / 100);
+    s.wastePct.drywall = Math.max(0, num("est-waste-drywall", s.wastePct.drywall * 100) / 100);
+    s.wastePct.sheathing = Math.max(0, num("est-waste-sheathing", s.wastePct.sheathing * 100) / 100);
+    s.wastePct.insulation = Math.max(0, num("est-waste-insulation", s.wastePct.insulation * 100) / 100);
+    if (typeof scheduleCacheSave === "function") scheduleCacheSave();
+    if (state.viewMode === "plan" && typeof render === "function") render();
+  };
+  for (const id of ["est-stud-spacing", "est-cripple-spacing", "est-plates", "est-header-ply",
+    "est-waste-framing", "est-waste-drywall", "est-waste-sheathing", "est-waste-insulation"]) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", onChange);
+  }
 }
 
 function bindSettingsModal() {
@@ -148,6 +202,8 @@ function bindSettingsModal() {
       if (radio.checked) setUnits(radio.value);
     });
   });
+
+  bindEstimateSettingsInputs();
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !modal.classList.contains("hidden")) {

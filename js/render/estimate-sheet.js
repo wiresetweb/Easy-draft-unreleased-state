@@ -111,6 +111,21 @@ function buildEstimateSections(est) {
 }
 
 function drawEstimateSheet(sheet, vp, ppi) {
+  // Locked state — a non-entitled visitor opened a file that already contains
+  // an estimate sheet. Show a notice instead of the takeoff rather than
+  // silently leaking the paid output.
+  if (!state.hasEstimatorEngineer) {
+    drawTableContent(sheet, vp, ppi, [{
+      title: "Materials Estimate — paid add-on",
+      columns: ["Locked"],
+      rows: [
+        ["This sheet needs the Materials Estimator add-on."],
+        ["Unlock it with the Estimator + Engineering bundle to see the takeoff."],
+      ],
+      empty: "",
+    }]);
+    return;
+  }
   const est = computeEstimate(state);
   drawTableContent(sheet, vp, ppi, buildEstimateSections(est));
 }

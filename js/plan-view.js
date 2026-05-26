@@ -2294,6 +2294,13 @@ function bindSheetProperties() {
       const oldType = sheet.sheetType || "drawing";
       const newType = propSheetTypeSel.value;
       if (oldType === newType) return;
+      // The Estimate sheet is a paid add-on — block the conversion and revert
+      // the picker for visitors without the entitlement.
+      if (newType === "estimate" && !state.hasEstimatorEngineer) {
+        propSheetTypeSel.value = oldType;
+        if (typeof promptEstimatorUpgrade === "function") promptEstimatorUpgrade();
+        return;
+      }
       sheet.sheetType = newType;
       // If the title still matches a known type-default, swap it for the
       // new type's default. Custom titles are left alone.
