@@ -37,6 +37,7 @@ function init() {
   bindFeedbackButton();
   bindTourButton();
   bindSettingsModal();
+  bindEstimateWizard();
   bindModeSwitch();
   bindSheetList();
   bindSheetProperties();

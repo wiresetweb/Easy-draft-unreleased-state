@@ -529,6 +529,7 @@ function bindFileMenu() {
     else if (action === "open") fileOpen();
     else if (action === "save") fileSave();
     else if (action === "save-as") fileSaveAs();
+    else if (action === "estimate-wizard") { if (typeof openEstimateWizard === "function") openEstimateWizard(); }
     else if (action === "export") fileExport();
     else if (action === "export-estimate-csv") exportEstimateCsv();
     else if (action === "settings") {

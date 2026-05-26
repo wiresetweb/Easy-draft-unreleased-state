@@ -86,6 +86,9 @@ function bindEvents() {
   toolListEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".tool");
     if (!btn) return;
+    // The Estimate button lives in the tool list but isn't a drawing tool.
+    if (btn.id === "tool-estimate-btn") { if (typeof openEstimateWizard === "function") openEstimateWizard(); return; }
+    if (!btn.dataset.tool) return;
     setTool(btn.dataset.tool);
   });
 

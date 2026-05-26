@@ -1826,6 +1826,21 @@ function addSheet() {
   return sheet;
 }
 
+// Return the document's Estimate sheet, creating one if none exists, and make
+// it active. Used by the estimate wizard's final "Generate" step.
+function ensureEstimateSheet() {
+  ensureSheets();
+  let sheet = (state.sheets || []).find((s) => (s.sheetType || "drawing") === "estimate");
+  if (!sheet) {
+    sheet = addSheet();
+    sheet.sheetType = "estimate";
+    sheet.titleBlock = sheet.titleBlock || {};
+    sheet.titleBlock.title = SHEET_TYPE_DEFAULT_TITLES.estimate;
+  }
+  state.activeSheetId = sheet.id;
+  return sheet;
+}
+
 async function removeSheet(id) {
   if (!Array.isArray(state.sheets)) return;
   if (state.sheets.length <= 1) {

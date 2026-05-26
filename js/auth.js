@@ -119,6 +119,7 @@ async function checkEntitlement(sb) {
     }
     if (active.has("estimator-engineer")) {
       state.hasEstimatorEngineer = true;
+      if (typeof updateEstimatorButtons === "function") updateEstimatorButtons();
     }
   } catch (err) {
     console.warn("[easy-draft] entitlement check failed:", err);
