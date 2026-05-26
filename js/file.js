@@ -50,6 +50,9 @@ function serializeDocument() {
       level: s.level,
       visible: s.visible,
       expanded: s.expanded,
+      // Materials Estimator per-story inputs (see docs/materials-estimator.md).
+      ceilingHeight: typeof s.ceilingHeight === "number" ? s.ceilingHeight : null,
+      framing: s.framing ? JSON.parse(JSON.stringify(s.framing)) : { floor: null, roof: null },
       sublayers: s.sublayers.map((l) => ({
         id: l.id,
         name: l.name,
@@ -60,6 +63,10 @@ function serializeDocument() {
     })),
     activeSublayerId: state.activeSublayerId,
     units: state.units,
+    // Class-B estimate settings travel with the document so an estimate is
+    // reproducible by whoever opens the file.
+    estimateSettings: state.estimateSettings
+      ? JSON.parse(JSON.stringify(state.estimateSettings)) : null,
     view: {
       zoom: state.zoom,
       pan: { x: state.pan.x, y: state.pan.y },
@@ -87,6 +94,8 @@ function loadDocument(data) {
     level: typeof s.level === "number" ? s.level : i,
     visible: s.visible !== false,
     expanded: s.expanded !== false,
+    ceilingHeight: typeof s.ceilingHeight === "number" ? s.ceilingHeight : null,
+    framing: normalizeFraming(s.framing),
     sublayers: (s.sublayers || []).map((l) => ({
       id: l.id || makeId("L"),
       name: l.name || "Layer",
@@ -106,6 +115,11 @@ function loadDocument(data) {
   if (data.units === "metric" || data.units === "imperial") {
     setUnits(data.units);
   }
+
+  // Restore Class-B estimate settings, falling back to fresh defaults for
+  // older files. Merge over defaults so a setting added after the file was
+  // saved still has a value.
+  state.estimateSettings = mergeEstimateSettings(data.estimateSettings);
 
   if (data.view && typeof data.view === "object") {
     if (typeof data.view.zoom === "number") {

@@ -108,6 +108,111 @@ const SPIRAL_MAX_STORIES = 10;
 // Cabinet builder defaults
 const DEFAULT_CABINET_DEPTH_FT = 2; // 24" — standard base cabinet
 
+// ==============================================================================
+// Materials Estimator — shared structural-input model + Class-B settings.
+// See docs/materials-estimator.md. The framing model here is deliberately
+// shared with the (future) Engineering Tool (docs/engineering-tool.md): the
+// estimator only reads size / spacing / direction, but the object also carries
+// species / grade so the Engineering Tool can consume it unchanged.
+// ==============================================================================
+
+// Nominal joist / rafter sizes and on-center spacings offered in the framing
+// input UI. Shared by both tools so there's one canonical list.
+const FRAMING_SIZES = ["2x6", "2x8", "2x10", "2x12", "2x14"];
+const FRAMING_SPACINGS_IN = [12, 16, 19.2, 24];
+
+// A blank per-level framing spec. direction is a world-space angle in radians
+// (the axis the members run along); species/grade stay null for the estimator
+// and are forced later by the Engineering Tool.
+function makeFramingSpec() {
+  return { direction: 0, size: "2x10", spacing: 16, species: null, grade: null };
+}
+
+// Coerce a persisted / hand-edited framing value into the canonical
+// { floor, roof } shape, where each slot is either null or a full spec.
+// Tolerates missing fields and legacy files that predate this model.
+function normalizeFraming(f) {
+  const slot = (v) => {
+    if (!v || typeof v !== "object") return null;
+    const base = makeFramingSpec();
+    return {
+      direction: typeof v.direction === "number" ? v.direction : base.direction,
+      size: FRAMING_SIZES.includes(v.size) ? v.size : base.size,
+      spacing: FRAMING_SPACINGS_IN.includes(v.spacing) ? v.spacing : base.spacing,
+      species: v.species != null ? v.species : null,
+      grade: v.grade != null ? v.grade : null,
+    };
+  };
+  if (!f || typeof f !== "object") return { floor: null, roof: null };
+  return { floor: slot(f.floor), roof: slot(f.roof) };
+}
+
+// Wall assemblies for the takeoff. The three thickness presets auto-map to an
+// assembly; thickness:0 and custom thicknesses are unresolved until the user
+// tags them with one of these (a Class-A gap until then).
+const WALL_ASSEMBLIES = {
+  "2x4": { label: "2×4 wood stud", studSize: "2x4", category: "framed" },
+  "2x6": { label: "2×6 wood stud", studSize: "2x6", category: "framed" },
+  "cmu": { label: "CMU / block",   studSize: null,  category: "cmu" },
+};
+// Which assembly each known thickness preset resolves to.
+const PRESET_TO_ASSEMBLY = { "int": "2x4", "ext-wood": "2x6", "ext-block": "cmu" };
+
+// Class-B estimate settings — visible, user-owned defaults, pre-seeded here,
+// editable in the settings UI, persisted in the .dstudio.json, and printed on
+// the Estimate sheet so the basis is auditable. NOTE: member SIZING (header /
+// joist depth) is intentionally absent — that's the Engineering Tool's job;
+// the estimator only counts plies and pieces.
+const ESTIMATE_DEFAULTS = {
+  studSpacingIn: 16,          // wall stud spacing, on-center
+  platesPerWall: 3,           // 1 bottom + 2 top plates
+  crippleSpacingIn: 16,       // cripple studs above/below openings
+  headerPly: 2,               // plies per header (size deferred to Engineering Tool)
+  stockLumberFt: [8, 10, 12, 16],   // available stud / plate stock lengths
+  drywallSheetFt: { w: 4, h: 8 },   // one drywall sheet
+  sheathingSheetFt: { w: 4, h: 8 }, // one sheathing / subfloor sheet (32 sf)
+  backsplashHeightFt: 1.5,    // 18" — cabinet backsplash height
+  // Waste factors applied before converting to whole pieces/sheets/units.
+  wastePct: {
+    framing: 0.10,
+    sheathing: 0.10,
+    drywall: 0.10,
+    insulation: 0.05,
+  },
+  // Flooring waste varies by pattern (hex tile is cut-heavy; carpet rolls
+  // waste less by area). Keys match the floor-shape `pattern` values.
+  flooringWastePct: {
+    hardwood: 0.10, lvp: 0.10, "tile-square": 0.10, "tile-hex": 0.15, carpet: 0.05,
+  },
+  // R-value note printed per exterior assembly (a documented convention, not a
+  // computed quantity).
+  insulationRByAssembly: { "ext-wood": "R-21", "ext-block": "R-13" },
+  // Fastener allowances (Class B; counted as separate lines by the engine).
+  fastenerAllowance: { drywallScrewsPerSheet: 32, framingNailsLbPerStud: 0.05 },
+};
+
+// Merge a saved (possibly partial / older) estimate-settings object over a
+// fresh clone of ESTIMATE_DEFAULTS, so settings added after a file was saved
+// still get a value. Recurses into plain objects; arrays and scalars from the
+// saved object replace the default wholesale.
+function mergeEstimateSettings(saved) {
+  const base = JSON.parse(JSON.stringify(ESTIMATE_DEFAULTS));
+  if (!saved || typeof saved !== "object") return base;
+  const merge = (dst, src) => {
+    for (const k in src) {
+      const v = src[k];
+      if (v && typeof v === "object" && !Array.isArray(v) &&
+          dst[k] && typeof dst[k] === "object" && !Array.isArray(dst[k])) {
+        merge(dst[k], v);
+      } else if (v !== undefined) {
+        dst[k] = v;
+      }
+    }
+    return dst;
+  };
+  return merge(base, saved);
+}
+
 const ORDINALS = [
   "First", "Second", "Third", "Fourth", "Fifth",
   "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"
@@ -364,6 +469,16 @@ const state = {
   // Entries are { ts: epoch ms, label: string }; pushed by logUserAction
   // and capped so an idle session doesn't pile up megabytes.
   actionLog: [],
+
+  // Materials Estimator — Class-B settings for this document, seeded from
+  // ESTIMATE_DEFAULTS and persisted in the .dstudio.json. Deep-cloned so
+  // edits never mutate the shared defaults object.
+  estimateSettings: JSON.parse(JSON.stringify(ESTIMATE_DEFAULTS)),
+
+  // Set by auth.js: true when the visitor owns the bundled estimator +
+  // engineering add-on (product_id 'estimator-engineer'). Gates the Estimate
+  // sheet + CSV. Mirrors state.paid; defaults false (locked).
+  hasEstimatorEngineer: false,
 };
 
 const ACTION_LOG_MAX = 30;

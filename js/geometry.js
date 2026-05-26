@@ -308,6 +308,30 @@ function pointInPolygon(px, py, pts) {
   return inside;
 }
 
+// Shoelace area of a closed polygon, in square world units (feet²). `pts` is
+// an array of {x,y}; winding doesn't matter (result is always non-negative).
+// Used by the Materials Estimator for flooring / subfloor takeoffs.
+function polygonArea(pts) {
+  if (!Array.isArray(pts) || pts.length < 3) return 0;
+  let sum = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    sum += (pts[j].x + pts[i].x) * (pts[j].y - pts[i].y);
+  }
+  return Math.abs(sum) / 2;
+}
+
+// Perimeter of a closed polygon, in world units (feet). Sums every edge
+// including the closing edge from the last point back to the first. Used for
+// baseboard / trim linear-footage.
+function polygonPerimeter(pts) {
+  if (!Array.isArray(pts) || pts.length < 2) return 0;
+  let total = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    total += Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+  }
+  return total;
+}
+
 // Door / window axes
 function doorAxes(sh) {
   const u = { x: Math.cos(sh.angle), y: Math.sin(sh.angle) };

@@ -58,6 +58,12 @@ function addStory(kind) {
     visible: true,
     expanded: true,
     sublayers,
+    // Materials Estimator fields. ceilingHeight is Class-A (never defaulted —
+    // null means "not entered" and is flagged by the completeness check).
+    // framing carries the shared structural-input model; joists are estimated
+    // only when the user opts in by filling framing.floor.
+    ceilingHeight: null,
+    framing: { floor: null, roof: null },
   });
   if (!state.activeSublayerId) {
     // Prefer Walls as the default working layer — that's what users typically
