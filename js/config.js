@@ -1,22 +1,25 @@
 'use strict';
 
 // ==============================================================================
-// Public configuration constants. Mirrors easydraftonline.com's js/config.js
-// so the drafting tool at /app/ can talk to the same Supabase project as the
-// marketing site without an HTTP fetch (which would break file:// dev).
+// Public configuration constants.
 //
-// These keys are publishable / anon — safe to ship in client JS. The
-// entitlement table is row-locked by RLS on the server.
+// SCRUBBED FOR THIS ISOLATED CLONE: every outbound endpoint is intentionally
+// blank so the app never communicates with any external service. With the
+// Supabase URL/key empty, js/auth.js bails before loading the CDN SDK or
+// querying Supabase (the visitor simply stays "unpaid"). With the feedback
+// URL empty, js/feedback.js falls back to a mailto: link instead of POSTing.
+// The production values lived here and mirror easydraftonline.com's
+// js/config.js — restore them there, not in this clone, if the network
+// integration is ever re-enabled.
 // ==============================================================================
 
-const SUPABASE_URL = "https://dpghsqmdnvwxyaeojbfx.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_DZAup0w4vG7gsRddZpmQQQ_eXNR8zzu";
+const SUPABASE_URL = "";
+const SUPABASE_PUBLISHABLE_KEY = "";
 
-// Where the Buy Pro button + the upgrade prompts on free-user exports
-// link to. Open in a new tab so the user doesn't lose their drawing.
-const CHECKOUT_URL = "https://easydraftonline.lemonsqueezy.com/checkout/buy/605b4285-01f5-46f1-8b03-6646a23f08c4";
+// Buy Pro button / upgrade-prompt link. Blank in this clone → the button is
+// inert (href falls back to "#") rather than pointing at the checkout.
+const CHECKOUT_URL = "";
 
-// Supabase edge function endpoint for the Give Feedback button. Function
-// source lives in supabase/functions/submit-feedback/. Leave blank to
-// fall back to a mailto: link.
-const FEEDBACK_FUNCTION_URL = SUPABASE_URL + "/functions/v1/submit-feedback";
+// Supabase edge function endpoint for the Give Feedback button. Blank → the
+// feedback flow falls back to a mailto: link, with no network call.
+const FEEDBACK_FUNCTION_URL = "";
