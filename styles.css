@@ -1065,6 +1065,76 @@ kbd {
   display: none;
 }
 
+/* Per-story Materials Estimator inputs (ceiling height + joist framing). */
+.story-estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 4px 16px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--text-muted, #6a7681);
+}
+.story.collapsed .story-estimate {
+  display: none;
+}
+.story-est-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.story-est-label {
+  flex: 0 0 auto;
+}
+.story-est-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 1px 4px;
+  font-size: 11px;
+  border: 1px solid var(--border-strong, #c5ccd3);
+  border-radius: 3px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+.story-est-input.story-est-missing {
+  border-color: #d9a300;
+  background: #fff8e6;
+}
+.story-est-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 1px 2px;
+  font-size: 11px;
+}
+.story-est-framing {
+  gap: 4px;
+}
+.story-est-dir {
+  flex: 0 0 3.5em;
+  width: 3.5em;
+}
+.story-est-deg {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+/* Estimator modal rows: opening rough-height input + wall-assembly picker. */
+.dim-rough-input {
+  width: 6em;
+  padding: 2px 5px;
+  font-size: 12px;
+  border: 1px solid var(--border-strong, #c5ccd3);
+  border-radius: 4px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+.wall-assembly-select {
+  flex: 1 1 auto;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
 .sub-row {
   display: flex;
   align-items: center;

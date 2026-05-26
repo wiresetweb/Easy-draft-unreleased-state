@@ -529,6 +529,8 @@ const dimModal = document.getElementById("dim-modal");
 const dimWidthDec = document.getElementById("dim-width-dec");
 const dimWidthInc = document.getElementById("dim-width-inc");
 const dimWidthReadout = document.getElementById("dim-width-readout");
+const dimRoughRow = document.getElementById("dim-rough-row");
+const dimRoughHeightInput = document.getElementById("dim-rough-height");
 const doorFlipRow = document.getElementById("door-flip-row");
 
 const colorPopupEl = document.getElementById("color-popup");
@@ -537,6 +539,8 @@ const lineModalEl = document.getElementById("line-modal");
 const lineStrokeRow = document.getElementById("line-stroke-row");
 const wallThicknessRow = document.getElementById("wall-thickness-row");
 const wallThicknessInput = document.getElementById("wall-thickness-input");
+const wallAssemblyRow = document.getElementById("wall-assembly-row");
+const wallAssemblySelect = document.getElementById("wall-assembly-select");
 const measureModalEl = document.getElementById("measure-modal");
 const floorModalEl = document.getElementById("floor-modal");
 const floorPatternSelect = document.getElementById("floor-pattern-select");

@@ -224,6 +224,126 @@ function trashSvg() {
 }
 
 
+// Per-story Materials Estimator inputs, shown under each story header in the
+// layer tree: ceiling height (Class-A) and opt-in joist framing (the shared
+// structural-input model). Listeners are attached directly to the freshly
+// created elements; renderLayerTree() rebuilds these on every call.
+function buildStoryEstimateControls(story) {
+  const wrap = document.createElement("div");
+  wrap.className = "story-estimate";
+
+  // --- Ceiling height (Class-A: never defaulted) ---
+  const chRow = document.createElement("label");
+  chRow.className = "story-est-row";
+  const chText = document.createElement("span");
+  chText.className = "story-est-label";
+  chText.textContent = "Ceiling";
+  const chInput = document.createElement("input");
+  chInput.type = "text";
+  chInput.className = "story-est-input";
+  chInput.placeholder = "set for estimate";
+  chInput.value = story.ceilingHeight != null ? formatFeet(story.ceilingHeight) : "";
+  if (story.ceilingHeight == null) chInput.classList.add("story-est-missing");
+  const commitCh = () => {
+    const raw = chInput.value.trim();
+    if (raw === "") {
+      if (story.ceilingHeight != null) { pushHistory("Cleared ceiling height"); story.ceilingHeight = null; renderLayerTree(); }
+      return;
+    }
+    const v = parseFeet(raw);
+    if (v === null || v <= 0) {
+      chInput.value = story.ceilingHeight != null ? formatFeet(story.ceilingHeight) : "";
+      return;
+    }
+    if (story.ceilingHeight != null && Math.abs(story.ceilingHeight - v) < 1e-6) return;
+    pushHistory(`Set ceiling height ${formatFeet(v)}`);
+    story.ceilingHeight = v;
+    renderLayerTree();
+  };
+  chInput.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); commitCh(); chInput.blur(); }
+    else if (e.key === "Escape") { e.preventDefault(); chInput.blur(); }
+  });
+  chInput.addEventListener("blur", commitCh);
+  chRow.appendChild(chText);
+  chRow.appendChild(chInput);
+  wrap.appendChild(chRow);
+
+  // --- Joist framing (opt-in; Class-A only once enabled) ---
+  const jRow = document.createElement("label");
+  jRow.className = "story-est-row";
+  const jToggle = document.createElement("input");
+  jToggle.type = "checkbox";
+  jToggle.checked = !!(story.framing && story.framing.floor);
+  const jText = document.createElement("span");
+  jText.className = "story-est-label";
+  jText.textContent = "Estimate joists";
+  jToggle.addEventListener("change", () => {
+    if (!story.framing) story.framing = { floor: null, roof: null };
+    if (jToggle.checked) { pushHistory("Enabled joist estimate"); story.framing.floor = makeFramingSpec(); }
+    else { pushHistory("Disabled joist estimate"); story.framing.floor = null; }
+    renderLayerTree();
+  });
+  jRow.appendChild(jToggle);
+  jRow.appendChild(jText);
+  wrap.appendChild(jRow);
+
+  if (story.framing && story.framing.floor) {
+    const f = story.framing.floor;
+    const fRow = document.createElement("div");
+    fRow.className = "story-est-row story-est-framing";
+
+    const sizeSel = document.createElement("select");
+    sizeSel.className = "story-est-select";
+    sizeSel.title = "Joist size";
+    for (const s of FRAMING_SIZES) {
+      const o = document.createElement("option"); o.value = s; o.textContent = s; sizeSel.appendChild(o);
+    }
+    sizeSel.value = f.size;
+    sizeSel.addEventListener("change", () => { pushHistory("Set joist size"); f.size = sizeSel.value; });
+
+    const spSel = document.createElement("select");
+    spSel.className = "story-est-select";
+    spSel.title = "Joist spacing (on-center)";
+    for (const sp of FRAMING_SPACINGS_IN) {
+      const o = document.createElement("option"); o.value = String(sp); o.textContent = sp + '" o.c.'; spSel.appendChild(o);
+    }
+    spSel.value = String(f.spacing);
+    spSel.addEventListener("change", () => { pushHistory("Set joist spacing"); f.spacing = parseFloat(spSel.value); });
+
+    const dirInput = document.createElement("input");
+    dirInput.type = "number";
+    dirInput.className = "story-est-input story-est-dir";
+    dirInput.title = "Joist direction (degrees the joists run)";
+    dirInput.min = "0"; dirInput.max = "180"; dirInput.step = "5";
+    dirInput.value = String(Math.round((f.direction || 0) * 180 / Math.PI));
+    const commitDir = () => {
+      let deg = parseFloat(dirInput.value);
+      if (isNaN(deg)) { dirInput.value = String(Math.round((f.direction || 0) * 180 / Math.PI)); return; }
+      deg = ((deg % 180) + 180) % 180;
+      pushHistory("Set joist direction");
+      f.direction = deg * Math.PI / 180;
+      dirInput.value = String(Math.round(deg));
+    };
+    dirInput.addEventListener("keydown", (e) => e.stopPropagation());
+    dirInput.addEventListener("change", commitDir);
+
+    fRow.appendChild(sizeSel);
+    fRow.appendChild(spSel);
+    const degWrap = document.createElement("span");
+    degWrap.className = "story-est-deg";
+    degWrap.appendChild(dirInput);
+    const degUnit = document.createElement("span");
+    degUnit.textContent = "°";
+    degWrap.appendChild(degUnit);
+    fRow.appendChild(degWrap);
+    wrap.appendChild(fRow);
+  }
+
+  return wrap;
+}
+
 function renderLayerTree() {
   layerTreeEl.innerHTML = "";
   for (const story of state.stories) {
@@ -278,6 +398,7 @@ function renderLayerTree() {
     }
 
     storyEl.appendChild(header);
+    storyEl.appendChild(buildStoryEstimateControls(story));
 
     const subList = document.createElement("div");
     subList.className = "sub-list";

@@ -23,6 +23,40 @@ function bindDimModal() {
     if (!btn) return;
     applyDoorFlip(btn.dataset.flip);
   });
+
+  dimRoughHeightInput.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); applyRoughHeightFromInput(); dimRoughHeightInput.blur(); }
+    else if (e.key === "Escape") { e.preventDefault(); dimRoughHeightInput.blur(); }
+  });
+  dimRoughHeightInput.addEventListener("blur", applyRoughHeightFromInput);
+}
+
+// Rough-opening height is Class-A for the estimate (never guessed from the
+// catalog name). Blank clears it back to a gap; a valid feet/inches value sets
+// it. Stored on the door / window shape, so it round-trips via cloneShape.
+function applyRoughHeightFromInput() {
+  const id = dimModal.dataset.shapeId;
+  const shape = id ? findShapeById(id) : null;
+  if (!shape || (shape.type !== "door" && shape.type !== "window")) return;
+  const raw = dimRoughHeightInput.value.trim();
+  if (raw === "") {
+    if (shape.roughHeight != null) {
+      pushHistory("Cleared rough height");
+      delete shape.roughHeight;
+      render();
+    }
+    return;
+  }
+  const v = parseFeet(raw);
+  if (v === null || v <= 0) {
+    dimRoughHeightInput.value = shape.roughHeight != null ? formatFeet(shape.roughHeight) : "";
+    return;
+  }
+  if (shape.roughHeight != null && Math.abs(shape.roughHeight - v) < 1e-6) return;
+  pushHistory(`Set rough height ${formatFeet(v)}`);
+  shape.roughHeight = v;
+  render();
 }
 
 function applyDoorFlip(type) {
@@ -100,6 +134,10 @@ function updateDimModal() {
   dimModal.dataset.shapeId = shape.id;
   dimWidthReadout.textContent = formatFeet(shape.width);
 
+  if (document.activeElement !== dimRoughHeightInput) {
+    dimRoughHeightInput.value = shape.roughHeight != null ? formatFeet(shape.roughHeight) : "";
+  }
+
   doorFlipRow.classList.toggle("hidden", shape.type !== "door");
 }
 
@@ -158,6 +196,44 @@ function bindLineModal() {
     else if (e.key === "Escape") { e.preventDefault(); wallThicknessInput.blur(); }
   });
   wallThicknessInput.addEventListener("blur", applyWallThicknessFromInput);
+
+  // Assembly picker for walls whose thickness isn't a known preset. Populate
+  // from the single WALL_ASSEMBLIES source so the options never drift.
+  for (const key in WALL_ASSEMBLIES) {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = WALL_ASSEMBLIES[key].label;
+    wallAssemblySelect.appendChild(opt);
+  }
+  wallAssemblySelect.addEventListener("pointerdown", (e) => e.stopPropagation());
+  wallAssemblySelect.addEventListener("change", () => applyWallAssembly(wallAssemblySelect.value));
+}
+
+// True when a thickness value matches one of the standard presets (which
+// auto-resolve to an assembly). thickness 0 / undefined and custom values are
+// unresolved and need an explicit assembly tag for the estimate.
+function wallThicknessIsPreset(t) {
+  if (!t) return false;
+  for (const key in WALL_THICKNESS_PRESETS) {
+    if (Math.abs(WALL_THICKNESS_PRESETS[key] - t) < 1e-6) return true;
+  }
+  return false;
+}
+
+function applyWallAssembly(key) {
+  const targets = getSelectedWallLines();
+  if (!targets.length) return;
+  let changed = false;
+  for (const sh of targets) {
+    if ((sh.assembly || "") !== (key || "")) { changed = true; break; }
+  }
+  if (!changed) return;
+  pushHistory(key ? "Set wall assembly" : "Cleared wall assembly");
+  for (const sh of targets) {
+    if (key) sh.assembly = key;
+    else delete sh.assembly;
+  }
+  render();
 }
 
 function applyWallThickness(t) {
@@ -218,6 +294,7 @@ function updateLineModal() {
   // selection is wall lines (single or multiple).
   lineStrokeRow.classList.toggle("hidden", !singleShape);
   wallThicknessRow.classList.toggle("hidden", !isWallSelection);
+  if (!isWallSelection) wallAssemblyRow.classList.add("hidden");
 
   // Position over the bbox of either the single shape or the whole selection.
   const bbox = singleShape ? shapeBBox(singleShape) : selectionBBox();
@@ -266,6 +343,18 @@ function updateLineModal() {
     }
     if (document.activeElement !== wallThicknessInput) {
       wallThicknessInput.value = allSame && first > 0 ? formatFeet(first) : "";
+    }
+
+    // Show the assembly picker when any selected wall's thickness isn't a
+    // preset (centerline / custom) — those are unresolved for the estimate.
+    const anyUnresolved = targets.some((sh) => !wallThicknessIsPreset(sh.thickness || 0));
+    wallAssemblyRow.classList.toggle("hidden", !anyUnresolved);
+    if (anyUnresolved) {
+      const firstA = targets[0].assembly || "";
+      const allSameA = targets.every((sh) => (sh.assembly || "") === firstA);
+      if (document.activeElement !== wallAssemblySelect) {
+        wallAssemblySelect.value = allSameA ? firstA : "";
+      }
     }
   }
 }

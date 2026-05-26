@@ -253,6 +253,10 @@
             <button type="button" class="dim-step-btn" id="dim-width-inc" aria-label="Make wider">+</button>
           </div>
         </div>
+        <div class="dim-row" id="dim-rough-row">
+          <label class="dim-label" title="Rough-opening height — required for the materials estimate">Rough Ht</label>
+          <input type="text" class="dim-rough-input" id="dim-rough-height" placeholder="for estimate" autocomplete="off" spellcheck="false" />
+        </div>
         <div class="dim-row dim-flip-row hidden" id="door-flip-row">
           <label class="dim-label">Mirror</label>
           <div class="flip-group">
@@ -291,6 +295,12 @@
             <button class="wall-thickness-btn" data-preset="ext-block" title='Exterior CMU/block (8")'>Ext. blk</button>
             <input type="text" class="wall-thickness-input" id="wall-thickness-input" placeholder="custom" autocomplete="off" spellcheck="false" />
           </div>
+        </div>
+        <div class="dim-row wall-assembly-row hidden" id="wall-assembly-row">
+          <label class="dim-label" title="This wall's thickness isn't a standard preset — pick its assembly so the estimate can frame it">Assembly</label>
+          <select class="wall-assembly-select" id="wall-assembly-select" title="Construction assembly for the materials estimate">
+            <option value="">&mdash; pick &mdash;</option>
+          </select>
         </div>
       </div>
 
@@ -633,6 +643,7 @@
   <script src="js/tools/cabinet.js"></script>
   <script src="js/tools/builtin-edit.js"></script>
   <script src="js/tools/furniture-builder.js"></script>
+  <script src="js/estimate.js"></script>
   <script src="js/plan-view.js"></script>
   <script src="js/file.js"></script>
   <script src="js/cache.js"></script>
