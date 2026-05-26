@@ -344,6 +344,10 @@ function buildStoryEstimateControls(story) {
   return wrap;
 }
 
+// Story IDs whose estimate-inputs panel is expanded (transient UI state — not
+// part of the document, reset on reload).
+const openEstimatePanels = new Set();
+
 function renderLayerTree() {
   layerTreeEl.innerHTML = "";
   for (const story of state.stories) {
@@ -385,6 +389,21 @@ function renderLayerTree() {
     addBtn.innerHTML = plusSvg();
     header.appendChild(addBtn);
 
+    // Estimate-inputs toggle — keeps ceiling height / joists out of the way
+    // until the user wants them (or the wizard opens them).
+    const estBtn = document.createElement("button");
+    estBtn.className = "icon-btn" + (openEstimatePanels.has(story.id) ? " active" : "");
+    estBtn.dataset.action = "toggle-estimate";
+    estBtn.title = "Estimate inputs (ceiling height, joists)";
+    estBtn.setAttribute("aria-label", `Estimate inputs for ${story.name}`);
+    estBtn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">' +
+      '<path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
+      'd="M2 4h8M13 4h1M2 8h1M6 8h8M2 12h5M10 12h4"/>' +
+      '<circle cx="11" cy="4" r="1.6" fill="currentColor"/>' +
+      '<circle cx="4.5" cy="8" r="1.6" fill="currentColor"/>' +
+      '<circle cx="8.5" cy="12" r="1.6" fill="currentColor"/></svg>';
+    header.appendChild(estBtn);
+
     // Last remaining story stays — losing every story would leave the canvas
     // with no place to draw and no active layer.
     if (state.stories.length > 1) {
@@ -398,7 +417,9 @@ function renderLayerTree() {
     }
 
     storyEl.appendChild(header);
-    storyEl.appendChild(buildStoryEstimateControls(story));
+    if (openEstimatePanels.has(story.id)) {
+      storyEl.appendChild(buildStoryEstimateControls(story));
+    }
 
     const subList = document.createElement("div");
     subList.className = "sub-list";

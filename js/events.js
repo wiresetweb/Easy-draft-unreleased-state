@@ -133,6 +133,10 @@ function bindEvents() {
       if (action === "expand") {
         story.expanded = !story.expanded;
         renderLayerTree();
+      } else if (action === "toggle-estimate") {
+        if (openEstimatePanels.has(story.id)) openEstimatePanels.delete(story.id);
+        else openEstimatePanels.add(story.id);
+        renderLayerTree();
       } else if (action === "vis-story") {
         // Visibility is a view setting, not a content edit — it round-trips
         // through save/load but doesn't belong on the undo stack. Toggling

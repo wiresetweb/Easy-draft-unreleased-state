@@ -1065,6 +1065,13 @@ kbd {
   display: none;
 }
 
+/* Active state for the story-pill estimate-inputs toggle. */
+.story-header .icon-btn.active {
+  color: var(--accent, #2f7);
+  background: var(--surface-alt, rgba(0,0,0,0.06));
+  border-radius: 4px;
+}
+
 /* Per-story Materials Estimator inputs (ceiling height + joist framing). */
 .story-estimate {
   display: flex;
