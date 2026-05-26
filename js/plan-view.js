@@ -1276,6 +1276,7 @@ function setViewMode(mode) {
     state.stairsDirection = null;
     hideLayerHintModal();
     ensureSheets();
+    if (typeof syncEstimatePages === "function") syncEstimatePages();
   }
 
   if (modeSwitchEl) {
@@ -1417,6 +1418,8 @@ function planPointerUp(e) {
 // ==============================================================================
 
 function captureAllSheetsForPrint(dpi) {
+  // Make sure overflow pages exist before we snapshot every sheet to the PDF.
+  if (typeof syncEstimatePages === "function") syncEstimatePages();
   if (!Array.isArray(state.sheets) || state.sheets.length === 0) return [];
 
   // Snapshot everything we're about to mutate so we can restore exactly.
@@ -1830,7 +1833,7 @@ function addSheet() {
 // it active. Used by the estimate wizard's final "Generate" step.
 function ensureEstimateSheet() {
   ensureSheets();
-  let sheet = (state.sheets || []).find((s) => (s.sheetType || "drawing") === "estimate");
+  let sheet = (state.sheets || []).find((s) => (s.sheetType || "drawing") === "estimate" && !s.estimateContOf);
   if (!sheet) {
     sheet = addSheet();
     sheet.sheetType = "estimate";
@@ -1839,6 +1842,85 @@ function ensureEstimateSheet() {
   }
   state.activeSheetId = sheet.id;
   return sheet;
+}
+
+// A continuation page for an overflowing estimate — mirrors the primary's
+// paper / orientation / text-scale so pagination agrees across pages.
+function makeEstimateContSheet(primary, pageIndex) {
+  return {
+    id: makeId("SH"),
+    name: "Materials Estimate (cont. " + pageIndex + ")",
+    number: (primary.number || "") + "." + pageIndex,
+    sheetType: "estimate",
+    paperSize: primary.paperSize,
+    orientation: primary.orientation,
+    pageOrigin: null,
+    pageOutlineVisible: false,
+    textScale: primary.textScale,
+    titleBlock: Object.assign({}, primary.titleBlock || {}),
+    notes: [],
+    estimateContOf: primary.id,
+    estimatePageIndex: pageIndex,
+  };
+}
+
+// Add / remove auto continuation sheets so the estimate's overflow always has
+// somewhere to land — and no stale extras hang around when it shrinks. Idempotent
+// and cheap when the count already matches. Mutates state.sheets in place.
+function syncEstimatePages() {
+  if (!Array.isArray(state.sheets)) return;
+  const primary = state.sheets.find((s) => (s.sheetType || "") === "estimate" && !s.estimateContOf);
+
+  if (!primary) {
+    // No estimate sheet → drop any orphaned continuation pages.
+    const kept = state.sheets.filter((s) => !s.estimateContOf);
+    if (kept.length !== state.sheets.length) {
+      state.sheets = kept;
+      if (!state.sheets.find((s) => s.id === state.activeSheetId)) {
+        state.activeSheetId = state.sheets[0] ? state.sheets[0].id : null;
+      }
+    }
+    return;
+  }
+
+  const needCont = Math.max(0, (typeof estimatePageCount === "function" ? estimatePageCount(primary) : 1) - 1);
+  const existing = state.sheets.filter((s) => s.estimateContOf === primary.id);
+  if (existing.length === needCont) {
+    // Count matches — just keep the mirrored props fresh (paper/scale/title).
+    existing.forEach((c, i) => {
+      c.paperSize = primary.paperSize;
+      c.orientation = primary.orientation;
+      c.textScale = primary.textScale;
+      c.estimatePageIndex = i + 1;
+      c.number = (primary.number || "") + "." + (i + 1);
+      c.titleBlock = Object.assign({}, primary.titleBlock || {},
+        { title: ((primary.titleBlock && primary.titleBlock.title) || "Materials Estimate") + " (cont. " + (i + 1) + ")" });
+    });
+    return;
+  }
+
+  // Rebuild the continuation set: pull existing ones out, reinsert the needed
+  // count right after the primary (reusing objects so ids/notes survive).
+  state.sheets = state.sheets.filter((s) => s.estimateContOf !== primary.id);
+  const at = state.sheets.indexOf(primary) + 1;
+  const conts = [];
+  for (let i = 0; i < needCont; i++) {
+    const c = existing[i] || makeEstimateContSheet(primary, i + 1);
+    c.estimateContOf = primary.id;
+    c.estimatePageIndex = i + 1;
+    c.sheetType = "estimate";
+    c.paperSize = primary.paperSize;
+    c.orientation = primary.orientation;
+    c.textScale = primary.textScale;
+    c.number = (primary.number || "") + "." + (i + 1);
+    c.titleBlock = Object.assign({}, primary.titleBlock || {},
+      { title: ((primary.titleBlock && primary.titleBlock.title) || "Materials Estimate") + " (cont. " + (i + 1) + ")" });
+    conts.push(c);
+  }
+  state.sheets.splice(at, 0, ...conts);
+  if (!state.sheets.find((s) => s.id === state.activeSheetId)) {
+    state.activeSheetId = primary.id;
+  }
 }
 
 async function removeSheet(id) {
@@ -2126,6 +2208,9 @@ function bindNotesEditor() {
 
 function renderSheetList() {
   if (!sheetListEl) return;
+  // Reconcile estimate continuation pages before drawing the list so added /
+  // removed pages show immediately (e.g. after a text-size change).
+  if (typeof syncEstimatePages === "function") syncEstimatePages();
   sheetListEl.innerHTML = "";
   if (!Array.isArray(state.sheets)) return;
   for (const sheet of state.sheets) {

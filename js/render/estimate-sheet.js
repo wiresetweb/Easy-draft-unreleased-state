@@ -127,5 +127,75 @@ function drawEstimateSheet(sheet, vp, ppi) {
     return;
   }
   const est = computeEstimate(state);
-  drawTableContent(sheet, vp, ppi, buildEstimateSections(est));
+  const pages = paginateEstimate(est, sheet);
+  const idx = Math.min(sheet.estimatePageIndex || 0, pages.length - 1);
+  drawTableContent(sheet, vp, ppi, pages[idx] || []);
+}
+
+// ---------- Auto-pagination ----------
+// drawTableContent lays content out top-down with these per-block heights
+// (expressed as fractions of ppi × text-scale). We mirror them in inches —
+// ppi cancels — so we can split the section list into pages without touching
+// the canvas. Keep these in lock-step with drawTableContent().
+const EST_TITLE_IN = (s) => 0.22 * s + 0.20;   // big sheet title + underline gap
+const EST_SECT_IN  = (s) => 0.14 * s * 1.5;    // section header
+const EST_EMPTY_IN = (s) => 0.10 * s * 2;      // "no rows" line
+const EST_COLHDR_IN = (s) => 0.085 * s * 1.8;  // column header + rule
+const EST_ROW_IN   = (s) => 0.115 * s * 1.9;   // one data row
+const EST_SAFETY_IN = 0.2;                      // conservative slack vs rounding
+
+// Usable section height (inches) on one page of this sheet, mirroring the
+// viewport math in renderPlanView (vp.h = paperH − margins − 0.25 − 0.9) minus
+// the top/bottom padding and the repeated title.
+function estimateContentBudgetIn(sheet) {
+  const paperH = paperDimensionsIn(sheet).h;
+  const scale = sheetTextScale(sheet);
+  const vpH = paperH - (SHEET_MARGIN_IN.top + SHEET_MARGIN_IN.bottom) - 0.25 - 0.9;
+  return Math.max(1, vpH - 0.5 - EST_TITLE_IN(scale) - EST_SAFETY_IN);
+}
+
+// Split sections into pages, each a section-list shaped for drawTableContent.
+// A section that overflows continues on the next page with a repeated header.
+function paginateEstimateSections(sections, budgetIn, scale) {
+  const SECT = EST_SECT_IN(scale), EMPTY = EST_EMPTY_IN(scale);
+  const COLHDR = EST_COLHDR_IN(scale), ROW = EST_ROW_IN(scale);
+  const pages = [];
+  let cur = [], used = 0;
+  const flush = () => { if (cur.length) { pages.push(cur); cur = []; used = 0; } };
+
+  for (const sec of sections) {
+    const opener = SECT + (sec.rows.length ? COLHDR + ROW : EMPTY);
+    if (used > 0 && used + opener > budgetIn) flush();
+    let part = { title: sec.title, columns: sec.columns, rows: [], empty: sec.empty };
+    cur.push(part);
+    used += SECT + (sec.rows.length ? COLHDR : EMPTY);
+    for (const row of sec.rows) {
+      // Break only once the current part already holds a row, so a single huge
+      // row can't loop forever.
+      if (used + ROW > budgetIn && part.rows.length > 0) {
+        flush();
+        part = { title: sec.title + " (cont.)", columns: sec.columns, rows: [], empty: sec.empty };
+        cur.push(part);
+        used += SECT + COLHDR;
+      }
+      part.rows.push(row);
+      used += ROW;
+    }
+  }
+  flush();
+  return pages.length ? pages : [[]];
+}
+
+function paginateEstimate(est, sheet) {
+  return paginateEstimateSections(
+    buildEstimateSections(est),
+    estimateContentBudgetIn(sheet),
+    sheetTextScale(sheet),
+  );
+}
+
+// How many pages the current estimate needs on the given (primary) sheet.
+function estimatePageCount(sheet) {
+  if (!state.hasEstimatorEngineer) return 1;
+  return paginateEstimate(computeEstimate(state), sheet).length;
 }
